@@ -1,0 +1,61 @@
+/* Phone explore view — GitHub discovery.
+
+Browse trending, popular, recently created repositories, programming
+languages, topics, developer profiles. Each repo shows name, owner,
+description, language, stars, forks, open issues, updated time.
+*/
+
+import { createElement } from '../../dom'
+
+export interface RepoOverview {
+  name: string
+  owner: string
+  description?: string | null
+  language?: string | null
+  stars: number
+  forks: number
+  issues: number
+  updatedAt: string
+}
+
+export interface ExploreProps {
+  repos: RepoOverview[]
+  onBack: () => void
+  onRepo: (repo: RepoOverview) => void
+}
+
+export function renderExplore({ repos, onBack, onRepo }: ExploreProps): HTMLElement {
+  const container = createElement('div', { className: 'phone-page' })
+
+  const rows = repos.map(r => `
+    <div class="repo-row" data-index="${repos.indexOf(r)}">
+      <div class="repo-name">${r.owner}/${r.name}</div>
+      ${r.description ? `<div class="repo-desc">${r.description}</div>` : ''}
+      <div class="repo-meta">
+        ${r.language ? `<span class="repo-lang">${r.language}</span> · ` : ''}
+        ⭐ ${r.stars} · 🍴 ${r.forks} · 🐛 ${r.issues}
+        <span class="repo-updated">${r.updatedAt}</span>
+      </div>
+    </div>
+  `).join('')
+
+  container.innerHTML = `
+    <div class="page-header">
+      <button class="btn btn-back" id="back-btn">← Back</button>
+      <h1>Explore</h1>
+    </div>
+    <div class="card">
+      ${repos.length === 0
+        ? '<p class="hint">No repositories to explore.</p>'
+        : `<div class="repo-list">${rows}</div>`}
+    </div>
+  `
+
+  container.querySelector('#back-btn')!.addEventListener('click', onBack)
+
+  container.querySelectorAll('.repo-row').forEach((el, i) => {
+    el.addEventListener('click', () => onRepo(repos[i]))
+  })
+
+  return container
+}

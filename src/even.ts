@@ -1,3 +1,13 @@
+/* Even bridge wrapper for the G2 glasses.
+
+Connects to the Even companion app, renders SDK containers (no DOM on the
+glasses), serializes BLE writes so they don't crash the connection, and
+routes gestures to handlers.
+
+Exactly one container captures input (the right column). Everything else
+is display-only.
+*/
+
 import {
   CreateStartUpPageContainer,
   EventSourceType,
@@ -15,23 +25,16 @@ import {
   isValidMenuItemID,
   waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
-
-const BRIDGE_TIMEOUT_MS = 4000
+import type { AppConfig } from './config'
 
 // G2 canvas: 576 x 288 px, monochrome green, 16 shades.
 export const CANVAS_W = 576
 export const CANVAS_H = 288
 
-// Two-column glasses layout. Left column stays fixed (clock/context),
-// right column holds the active screen content. Exactly one container
-// captures input: the right column, where swipes carry meaning.
-const LEFT_ID = 1
-const LEFT_NAME = 'left'
-const RIGHT_ID = 2
-const RIGHT_NAME = 'right'
-const LEFT_WIDTH = 240
-const RIGHT_X = 240
-const RIGHT_WIDTH = CANVAS_W - RIGHT_X
+export const LEFT_ID = 1
+export const LEFT_NAME = 'left'
+export const RIGHT_ID = 2
+export const RIGHT_NAME = 'right'
 
 export type SwipeDirection = 'up' | 'down'
 export type InputSource = 'glasses' | 'ring' | 'unknown'
@@ -57,6 +60,8 @@ export interface GitHubRuntime {
   openMenu: (items: { id: number; label: string }[]) => Promise<void>
   exitApp: () => Promise<void>
   getUserInfo: () => Promise<{ name?: string; avatar?: string; country?: string }>
+  getStorage: (key: string) => Promise<string>
+  setStorage: (key: string, value: string) => Promise<boolean>
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -77,11 +82,16 @@ function classifySource(src: number | undefined): InputSource {
   return 'unknown'
 }
 
-export async function connectGitHubRuntime(
-  initialLeft: string,
-  initialRight: string,
-  menu: readonly { id: number; label: string }[] = [],
-): Promise<GitHubRuntime | null> {
+interface RuntimeArgs {
+  config: AppConfig
+  initialLeft: string
+  initialRight: string
+  menu?: readonly { id: number; label: string }[]
+}
+
+export async function connectGitHubRuntime(args: RuntimeArgs): Promise<GitHubRuntime | null> {
+  const { config, initialLeft, initialRight, menu = [] } = args
+  const BRIDGE_TIMEOUT_MS = config.timeoutMs
   let bridge: Awaited<ReturnType<typeof waitForEvenAppBridge>>
   try {
     bridge = await withTimeout(waitForEvenAppBridge(), BRIDGE_TIMEOUT_MS)
@@ -104,25 +114,27 @@ export async function connectGitHubRuntime(
   const leftText = new TextContainerProperty({
     xPosition: 0,
     yPosition: 0,
-    width: LEFT_WIDTH,
+    width: config.leftWidth,
     height: CANVAS_H,
     borderWidth: 0,
-    borderColor: 5,
-    paddingLength: 6,
+    borderColor: config.borderColor,
+    textColor: config.normalText,
+    paddingLength: config.paddingLength,
     containerID: LEFT_ID,
     containerName: LEFT_NAME,
     content: initialLeft,
     isEventCapture: 0,
   })
   const rightText = new TextContainerProperty({
-    xPosition: RIGHT_X,
+    xPosition: CANVAS_W - config.rightWidth,
     yPosition: 0,
-    width: RIGHT_WIDTH,
+    width: config.rightWidth,
     height: CANVAS_H,
-    borderWidth: 1,
-    borderColor: 8,
+    borderWidth: config.borderWidth,
+    borderColor: config.borderColor,
     borderRadius: 4,
-    paddingLength: 6,
+    textColor: config.normalText,
+    paddingLength: config.paddingLength,
     containerID: RIGHT_ID,
     containerName: RIGHT_NAME,
     content: initialRight,
@@ -145,8 +157,9 @@ export async function connectGitHubRuntime(
       width: CANVAS_W,
       height: CANVAS_H,
       borderWidth: 0,
-      borderColor: 5,
-      paddingLength: 6,
+      borderColor: config.borderColor,
+      textColor: config.normalText,
+      paddingLength: config.paddingLength,
       containerID: RIGHT_ID,
       containerName: RIGHT_NAME,
       content: combined,
@@ -178,6 +191,7 @@ export async function connectGitHubRuntime(
         contentOffset: 0,
         contentLength: Math.max(lastLeftSent.length, text.length),
         content: text,
+        textColor: config.normalText,
       }),
     )
     lastLeftSent = text
@@ -192,6 +206,7 @@ export async function connectGitHubRuntime(
         contentOffset: 0,
         contentLength: Math.max(lastRightSent.length, text.length),
         content: text,
+        textColor: config.normalText,
       }),
     )
     lastRightSent = text
@@ -258,8 +273,9 @@ export async function connectGitHubRuntime(
       width: CANVAS_W,
       height: HEADER_H,
       borderWidth: 0,
-      borderColor: 5,
-      paddingLength: 6,
+      borderColor: config.borderColor,
+      textColor: config.normalText,
+      paddingLength: config.paddingLength,
       containerID: 20,
       containerName: 'menu_hdr',
       content: 'Menu',
@@ -271,10 +287,10 @@ export async function connectGitHubRuntime(
       yPosition: HEADER_H,
       width: CANVAS_W,
       height: CANVAS_H - HEADER_H,
-      borderWidth: 1,
-      borderColor: 8,
+      borderWidth: config.borderWidth,
+      borderColor: config.borderColor,
       borderRadius: 4,
-      paddingLength: 4,
+      paddingLength: config.paddingLength,
       containerID: 21,
       containerName: 'menu_list',
       isEventCapture: 1,
@@ -294,11 +310,7 @@ export async function connectGitHubRuntime(
           if (event.listEvent) {
             unsubscribe()
             bridge.rebuildPageContainer(
-              new RebuildPageContainer({
-                containerTotalNum: 2,
-                textObject: [leftText, rightText],
-                menuObject,
-              }),
+              new RebuildPageContainer({ containerTotalNum: 2, textObject: [leftText, rightText], menuObject }),
             ).then(() => resolve())
             return
           }
@@ -307,11 +319,7 @@ export async function connectGitHubRuntime(
             if (t === OsEventTypeList.DOUBLE_CLICK_EVENT) {
               unsubscribe()
               bridge.rebuildPageContainer(
-                new RebuildPageContainer({
-                  containerTotalNum: 2,
-                  textObject: [leftText, rightText],
-                  menuObject,
-                }),
+                new RebuildPageContainer({ containerTotalNum: 2, textObject: [leftText, rightText], menuObject }),
               ).then(() => resolve())
               return
             }
@@ -362,6 +370,20 @@ export async function connectGitHubRuntime(
         return { name: u.name, avatar: u.avatar, country: u.country }
       } catch {
         return {}
+      }
+    },
+    async getStorage(key) {
+      try {
+        return await bridge.getLocalStorage(key)
+      } catch {
+        return ''
+      }
+    },
+    async setStorage(key, value) {
+      try {
+        return await bridge.setLocalStorage(key, value)
+      } catch {
+        return false
       }
     },
   }
