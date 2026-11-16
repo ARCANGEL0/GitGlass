@@ -1,0 +1,20 @@
+{
+  "package_id": "com.arcxlo.githubg2",
+  "edition": "202601",
+  "name": "GitHub G2",
+  "version": "0.1.0",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Calls the GitHub REST API (api.github.com) to fetch repositories, pull requests, issues, notifications, and the authenticated user profile. Read-only access; no data is stored or sent anywhere else.",
+      "whitelist": ["https://api.github.com"]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Optional future voice input for quick search on the glasses. Not used in this release; declared so the permission exists if voice search is added."
+    }
+  ],
+  "supported_languages": ["en"]
+}
