@@ -48,6 +48,10 @@ export class GlassesApp {
 
   setState(state: AppState): void {
     this.state = state
+    if (state.token && this.stack.current?.kind === 'moduleList') {
+      void this.enterModule(this.enabledModules[0] ?? 'feed', true)
+      return
+    }
     void this.paint()
   }
 
@@ -493,8 +497,7 @@ export class GlassesApp {
       const enabled = this.enabledModules
       const module = enabled[selectedIndex - 1]
       if (module) {
-        this.stack.replace({ kind: 'moduleList', module, title: 'GitHub' })
-        void this.enterModule(module)
+        void this.enterModule(module, true)
       }
     })
 
@@ -560,16 +563,18 @@ export class GlassesApp {
     }
   }
 
-  private async enterModule(module: ModuleId): Promise<void> {
+  private async enterModule(module: ModuleId, replace = false): Promise<void> {
     const items = await this.fetchItems(module)
     this.itemsCache.set(module, items as any)
-    this.stack.push({
+    const screen = {
       kind: 'itemList',
       module,
       title: MODULES.find(m => m.id === module)?.label ?? module,
       items,
       selectedIndex: 0,
-    })
+    } as const
+    if (replace) this.stack.replace(screen)
+    else this.stack.push(screen)
     await this.paint()
   }
 

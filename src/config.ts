@@ -61,7 +61,7 @@ export interface AppConfig {
 export const DEFAULT_CONFIG: AppConfig = {
   appName: 'GitHub G2',
   packageId: 'com.arcxlo.githubg2',
-  version: '1.1.6',
+  version: '1.3.1',
   apiBase: 'https://api.github.com',
   scopes: ['repo:read', 'pull_requests:read', 'issues:read', 'notifications:read', 'actions:read'],
   cacheTtlMs: 5 * 60_000,

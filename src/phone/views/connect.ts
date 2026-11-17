@@ -29,7 +29,7 @@ export function renderConnect({
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Connect GitHub</h1>
     </div>
 

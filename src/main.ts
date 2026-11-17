@@ -67,7 +67,7 @@ async function main(): Promise<void> {
 
   const glasses = new GlassesApp(runtime, store.get(), config, client)
   store.subscribe(state => glasses.setState(state))
-  store.attachBridge(
+  await store.attachBridge(
     key => runtime.getStorage(key),
     (key, value) => runtime.setStorage(key, value),
   )

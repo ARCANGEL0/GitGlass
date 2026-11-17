@@ -5,6 +5,7 @@ conclusion, trigger, timestamp. Read-only.
 */
 
 import { createElement } from '../../dom'
+import { formatDate } from './shared'
 
 export interface WorkflowRunItem {
   name: string
@@ -34,13 +35,13 @@ export function renderActions({ runs, onBack }: ActionsProps): HTMLElement {
         ${r.conclusion ? `<span class="action-run-conclusion">${r.conclusion}</span>` : ''}
         <span class="action-run-event">${r.event}</span>
       </div>
-      <div class="action-run-time">${r.createdAt}</div>
+      <div class="action-run-time">Started ${formatDate(r.createdAt)}</div>
     </div>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Actions</h1>
     </div>
     <div class="card">

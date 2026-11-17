@@ -5,6 +5,7 @@ created/updated dates, review status, mergeability, requested reviewers.
 */
 
 import { createElement } from '../../dom'
+import { formatDate } from './shared'
 
 export interface CollabPrItem {
   repo: string
@@ -43,13 +44,13 @@ export function renderCollabPrs({ prs, onBack, onPr }: CollabPrsProps): HTMLElem
           ? `<span class="collab-pr-reviewers">review: ${p.requestedReviewers.join(', ')}</span>`
           : ''}
       </div>
-      <div class="collab-pr-time">created ${p.createdAt} · updated ${p.updatedAt}</div>
+      <div class="collab-pr-time">Created ${formatDate(p.createdAt)} · updated ${formatDate(p.updatedAt)}</div>
     </div>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Collab PRs</h1>
     </div>
     <div class="card">

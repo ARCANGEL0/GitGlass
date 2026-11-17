@@ -37,7 +37,7 @@ export function renderCodeSearch({ results, query, onBack, onResult }: CodeSearc
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Code Search</h1>
     </div>
     <div class="card">

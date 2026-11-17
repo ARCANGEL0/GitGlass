@@ -6,6 +6,7 @@ author, status, draft flag, review status, updated time.
 */
 
 import { createElement } from '../../dom'
+import { formatDate } from './shared'
 
 export interface PullRequestItem {
   repo: string
@@ -39,13 +40,13 @@ export function renderPullRequests({ prs, onBack, onPr }: PullRequestsProps): HT
         <span class="pr-state">${p.state}${p.draft ? ' · draft' : ''}</span>
         <span class="pr-review">${p.reviewStatus}</span>
       </div>
-      <div class="pr-time">${p.updatedAt}</div>
+      <div class="pr-time">Updated ${formatDate(p.updatedAt)}</div>
     </div>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Pull Requests</h1>
     </div>
     <div class="card">

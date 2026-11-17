@@ -47,7 +47,7 @@ export function renderModules({ prefs, onChange, onBack }: ModulesProps): HTMLEl
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Module Configuration</h1>
     </div>
     <p class="hint">Enable modules to show them in the glasses navigation. Disable to hide.</p>

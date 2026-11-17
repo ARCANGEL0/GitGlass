@@ -6,6 +6,7 @@ assignee, open/closed status, timestamp.
 */
 
 import { createElement } from '../../dom'
+import { formatDate } from './shared'
 
 export interface IssueItem {
   repo: string
@@ -42,13 +43,13 @@ export function renderIssues({ issues, onBack, onIssue }: IssuesProps): HTMLElem
       <div class="issue-labels">
         ${i.labels.map(l => `<span class="issue-label">${l.name}</span>`).join('')}
       </div>
-      <div class="issue-time">${i.updatedAt}</div>
+      <div class="issue-time">Updated ${formatDate(i.updatedAt)}</div>
     </div>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Issues</h1>
     </div>
     <div class="card">

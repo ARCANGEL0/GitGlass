@@ -48,6 +48,8 @@ export function renderDashboard({
       <h1>Dashboard</h1>
     </div>
 
+    <p class="page-intro">A quiet view of the GitHub work that needs your attention.</p>
+
     <div class="profile-card">
       <img class="avatar" src="${user.avatar ?? ''}" alt="" />
       <div class="profile-info">
@@ -57,6 +59,7 @@ export function renderDashboard({
       </div>
     </div>
 
+    <div class="dashboard-section-label">Workspace</div>
     <div class="module-grid">
       ${cards}
     </div>

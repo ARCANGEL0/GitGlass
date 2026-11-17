@@ -5,6 +5,7 @@ and last updated. Tap a repo to open its details.
 */
 
 import { createElement } from '../../dom'
+import { formatDate } from './shared'
 
 export interface RepoItem {
   fullName: string
@@ -32,16 +33,18 @@ export function renderMyRepositories({ repos, onBack, onRepo }: MyRepositoriesPr
       <div class="repo-name">${r.fullName}</div>
       ${r.description ? `<div class="repo-desc">${r.description}</div>` : ''}
       <div class="repo-meta">
-        ${r.language ? `<span class="repo-lang">${r.language}</span> · ` : ''}
-        ⭐ ${r.stars} · 🍴 ${r.forks} · 🐛 ${r.issues}
-        <span class="repo-updated">${r.updatedAt}</span>
+        ${r.language ? `<span class="repo-lang">${r.language}</span>` : ''}
+        <span>Stars ${r.stars}</span>
+        <span>Forks ${r.forks}</span>
+        <span>Issues ${r.issues}</span>
+        <span class="repo-updated">Updated ${formatDate(r.updatedAt)}</span>
       </div>
     </div>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>My Repositories</h1>
     </div>
     <div class="card">

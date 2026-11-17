@@ -6,6 +6,7 @@ description.
 */
 
 import { createElement } from '../../dom'
+import { escapeHtml, formatDate } from './shared'
 
 export interface FeedEntry {
   repo: string
@@ -24,28 +25,36 @@ export interface FeedProps {
 export function renderFeed({ entries, onBack, onEntry }: FeedProps): HTMLElement {
   const container = createElement('div', { className: 'phone-page' })
 
-  const rows = entries.map(e => `
-    <div class="feed-entry" data-index="${entries.indexOf(e)}">
-      <div class="feed-meta">
-        <span class="feed-repo">${e.repo}</span>
-        <span class="feed-type">${e.type}</span>
-      </div>
-      <div class="feed-actor">${e.actor}</div>
-      <div class="feed-desc">${e.description}</div>
-      <div class="feed-time">${e.updatedAt}</div>
-    </div>
+  const rows = entries.map((e, index) => `
+    <button class="feed-entry" type="button" data-index="${index}">
+      <span class="activity-mark" aria-hidden="true"></span>
+      <span class="feed-content">
+        <span class="feed-meta">
+          <span class="feed-repo">${escapeHtml(e.repo)}</span>
+          <span class="feed-type">${escapeHtml(e.type)}</span>
+        </span>
+        <span class="feed-desc">${escapeHtml(e.description)}</span>
+        <span class="feed-time">${escapeHtml(formatDate(e.updatedAt))}</span>
+      </span>
+      <span class="row-chevron" aria-hidden="true"></span>
+    </button>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
+      <button class="btn btn-back" id="back-btn">Back</button>
       <h1>Feed</h1>
     </div>
-    <div class="card">
+    <p class="page-intro">Recent activity from people and repositories you follow.</p>
+    <section class="list-panel" aria-label="Recent activity">
+      <div class="list-panel-header">
+        <span>Recent activity</span>
+        <span class="list-count">${entries.length} ${entries.length === 1 ? 'event' : 'events'}</span>
+      </div>
       ${entries.length === 0
-        ? '<p class="hint">No recent activity.</p>'
+        ? '<div class="empty-state"><strong>No recent activity</strong><span>New stars, follows, pushes, and pull requests will appear here.</span></div>'
         : `<div class="feed-list">${rows}</div>`}
-    </div>
+    </section>
   `
 
   container.querySelector('#back-btn')!.addEventListener('click', onBack)

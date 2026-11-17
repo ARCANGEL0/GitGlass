@@ -1,8 +1,8 @@
 /* Glasses navigation — a screen stack for the G2 HUD.
 
 Screens:
-  moduleList  — root, shows enabled modules. Swipe up/down to change selection,
-                tap to enter the module, long-press for the contextual menu.
+  moduleList  — legacy root used only before authentication. Categories are
+                selected from the G2 app menu, never shown in the content frame.
   itemList    — items within a module (PRs, issues, repos, etc.). Swipe up/down
                 to move the selection, tap to open the item detail.
   detail      — an item's detail with paged sections. Swipe up/down to move

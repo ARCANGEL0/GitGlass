@@ -28,6 +28,8 @@ export class StateStore {
     setItem(key: string, value: string): Promise<boolean>
   } | null = null
   private persisted = false
+  private stateRevision = 0
+  private persistQueue: Promise<void> = Promise.resolve()
   private config: AppConfig
 
   constructor(initial: AppState = { ...EMPTY_STATE }, config: AppConfig = DEFAULT_CONFIG) {
@@ -41,10 +43,20 @@ export class StateStore {
 
   /** Call once the Even bridge is available. Persistence switches to the
    *  companion-app native storage; any pending local-only changes are flushed. */
-  attachBridge(getItem: (key: string) => Promise<string>, setItem: (key: string, value: string) => Promise<boolean>): void {
+  async attachBridge(
+    getItem: (key: string) => Promise<string>,
+    setItem: (key: string, value: string) => Promise<boolean>,
+  ): Promise<boolean> {
     this.bridge = { getItem, setItem }
     this.persisted = false
-    void this.load()
+    const revision = this.stateRevision
+    const loaded = await this.load(revision)
+
+    // This also migrates a browser-preview value into native storage. If the
+    // user changed state while the bridge was loading, that newer state wins.
+    await this.persist()
+    if (loaded) this.notify()
+    return loaded
   }
 
   get(): AppState {
@@ -64,17 +76,19 @@ export class StateStore {
   }
 
   /** Partially update state, persist, and notify subscribers. */
-  set(patch: Partial<AppState>): void {
+  async set(patch: Partial<AppState>): Promise<void> {
     this.state = { ...this.state, ...patch, configVersion: CONFIG_VERSION }
-    void this.persist()
+    this.stateRevision += 1
     this.notify()
+    await this.persist()
   }
 
   /** Reset to empty state (disconnect). */
-  reset(): void {
+  async reset(): Promise<void> {
     this.state = { ...EMPTY_STATE, configVersion: CONFIG_VERSION }
-    void this.persist()
+    this.stateRevision += 1
     this.notify()
+    await this.persist()
   }
 
   subscribe(fn: Subscriber): () => void {
@@ -95,37 +109,56 @@ export class StateStore {
     }
   }
 
-  private async persist(): Promise<void> {
+  private persist(): Promise<void> {
     const value = JSON.stringify(this.state)
-    if (this.bridge) {
-      try {
-        await this.bridge.setItem(STORAGE_KEY, value)
-        this.persisted = true
-      } catch {
-        if (this.storage) this.storage.setItem(FALLBACK_KEY, value)
+    const write = async (): Promise<void> => {
+      if (this.bridge) {
+        try {
+          const saved = await this.bridge.setItem(STORAGE_KEY, value)
+          if (saved) {
+            this.persisted = true
+            return
+          }
+        } catch {
+          // Fall through to browser storage when native storage is unavailable.
+        }
       }
-    } else if (this.storage) {
-      this.storage.setItem(FALLBACK_KEY, value)
+
+      try {
+        this.storage?.setItem(FALLBACK_KEY, value)
+      } catch {
+        // Some WebViews expose localStorage but reject writes in private mode.
+      }
     }
+
+    this.persistQueue = this.persistQueue.then(write, write)
+    return this.persistQueue
   }
 
   /** Load persisted state. Returns true if something was loaded. */
-  async load(): Promise<boolean> {
+  async load(expectedRevision?: number): Promise<boolean> {
     let raw: string | null = null
-    try {
-      if (this.bridge) {
+    if (this.bridge) {
+      try {
         raw = await this.bridge.getItem(STORAGE_KEY)
         if (raw) {
           this.persisted = true
         }
+      } catch {
+        raw = null
       }
-      if (!raw && this.storage) {
+    }
+    if (!raw && this.storage) {
+      try {
         raw = this.storage.getItem(FALLBACK_KEY)
+      } catch {
+        raw = null
       }
-    } catch {
-      raw = null
     }
     if (!raw) return false
+    if (expectedRevision !== undefined && expectedRevision !== this.stateRevision) {
+      return false
+    }
     try {
       const parsed = JSON.parse(raw) as Partial<AppState>
       if (parsed.configVersion !== CONFIG_VERSION) {

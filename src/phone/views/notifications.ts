@@ -5,6 +5,7 @@ repository, subject, reason, type, timestamp, read/unread status.
 */
 
 import { createElement } from '../../dom'
+import { formatDate } from './shared'
 
 export interface NotificationItem {
   repository: string
@@ -35,14 +36,14 @@ export function renderNotifications({ notifications, onBack, onNotification }: N
         <span class="notif-reason">${n.reason}</span>
         ${n.unread ? '<span class="notif-unread-badge">unread</span>' : ''}
       </div>
-      <div class="notif-time">${n.updatedAt}</div>
+      <div class="notif-time">Updated ${formatDate(n.updatedAt)}</div>
     </div>
   `).join('')
 
   container.innerHTML = `
     <div class="page-header">
-      <button class="btn btn-back" id="back-btn">← Back</button>
-      <h1>Notifications${unreadCount > 0 ? ` · ${unreadCount} unread` : ''}</h1>
+      <button class="btn btn-back" id="back-btn">Back</button>
+      <h1>Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}</h1>
     </div>
     <div class="card">
       ${notifications.length === 0

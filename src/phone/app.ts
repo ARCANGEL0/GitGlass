@@ -63,8 +63,64 @@ type RepoOverview = { name: string; owner: string; description?: string | null; 
 type SearchResultItem = { type: 'repository' | 'issue' | 'pull_request' | 'user' | 'code'; name: string; fullName?: string; owner?: string; description?: string | null; url: string }
 type WorkflowRunItem = { name: string; repository: string; branch: string; status: 'queued' | 'in_progress' | 'completed'; conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null; event: string; createdAt: string }
 
+function eventTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    CommitCommentEvent: 'Commented',
+    CreateEvent: 'Created',
+    DeleteEvent: 'Deleted',
+    ForkEvent: 'Forked',
+    GollumEvent: 'Edited wiki',
+    IssueCommentEvent: 'Commented',
+    IssuesEvent: 'Issue',
+    MemberEvent: 'Member change',
+    PublicEvent: 'Made public',
+    PullRequestEvent: 'Pull request',
+    PullRequestReviewEvent: 'Reviewed',
+    PushEvent: 'Pushed',
+    ReleaseEvent: 'Released',
+    SponsorshipEvent: 'Sponsorship',
+    StarEvent: 'Starred',
+    WatchEvent: 'Starred',
+  }
+  return labels[type] ?? type.replace(/Event$/, '')
+}
+
+function describeEvent(event: any, actor: string, repo: string): string {
+  const action = event.payload?.action
+  switch (event.type) {
+    case 'PushEvent': {
+      const count = event.payload?.size ?? event.payload?.commits?.length
+      return `${actor} pushed ${count ? `${count} ${count === 1 ? 'commit' : 'commits'}` : 'new commits'} to ${repo}`
+    }
+    case 'WatchEvent':
+    case 'StarEvent':
+      return `${actor} starred ${repo}`
+    case 'ForkEvent':
+      return `${actor} forked ${repo}`
+    case 'IssuesEvent':
+      return `${actor} ${action ?? 'updated'} an issue in ${repo}`
+    case 'IssueCommentEvent':
+      return `${actor} commented on an issue in ${repo}`
+    case 'PullRequestEvent':
+      return `${actor} ${action ?? 'updated'} a pull request in ${repo}`
+    case 'PullRequestReviewEvent':
+      return `${actor} reviewed a pull request in ${repo}`
+    case 'ReleaseEvent':
+      return `${actor} published a release for ${repo}`
+    case 'CreateEvent':
+      return `${actor} created ${event.payload?.ref_type ?? 'new content'} in ${repo}`
+    case 'DeleteEvent':
+      return `${actor} deleted ${event.payload?.ref_type ?? 'content'} in ${repo}`
+    case 'FollowEvent':
+      return `${actor} followed an account`
+    default:
+      return `${actor} updated ${repo}`
+  }
+}
+
 export class PhoneApp {
   private store: StateStore
+  private client: GitHubClient
   private auth: GitHubAuth
   private users: UsersService
   private repos: RepositoriesService
@@ -79,6 +135,7 @@ export class PhoneApp {
   constructor(root: HTMLElement, store: StateStore, client: GitHubClient) {
     this.root = root
     this.store = store
+    this.client = client
     this.auth = new GitHubAuth(client)
     this.users = new UsersService(client)
     this.repos = new RepositoriesService(client)
@@ -99,7 +156,19 @@ export class PhoneApp {
 
   async start(): Promise<void> {
     await this.store.load()
-    this.store.subscribe(() => void this.render())
+    this.client.setToken(this.state.token)
+    if (this.state.token && this.state.userLogin) {
+      this.view = 'dashboard'
+    }
+    this.store.subscribe(state => {
+      // A token loaded from native storage must be restored on the API client
+      // before the dashboard starts fetching profile and module data.
+      this.client.setToken(state.token)
+      if (state.token && state.userLogin && this.view === 'landing') {
+        this.view = 'dashboard'
+      }
+      void this.render()
+    })
     await this.render()
   }
 
@@ -310,7 +379,7 @@ export class PhoneApp {
         void this.render()
         return
       }
-      this.store.set({
+      await this.store.set({
         token,
         userLogin: result.user.login,
         syncedAt: Date.now(),
@@ -334,14 +403,25 @@ export class PhoneApp {
   // ── Feed ─────────────────────────────────────────────────────────────
 
   private async fetchFeed(): Promise<FeedEntry[]> {
-    const events = await this.repos.list().catch(() => [] as any[])
-    return events.slice(0, 10).map(e => ({
-      repo: e.full_name,
-      type: 'Pushed',
-      actor: e.owner.login,
-      description: 'Recent activity',
-      updatedAt: e.updated_at,
-    }))
+    const login = this.state.userLogin
+    if (!login) return []
+
+    const events = await this.client
+      .collect<any>(`/users/${encodeURIComponent(login)}/received_events`, { perPage: 20, maxPages: 2 })
+      .catch(() => [] as any[])
+
+    return events.slice(0, 20).map(event => {
+      const repo = event.repo?.name ?? 'GitHub'
+      const actor = event.actor?.display_login ?? event.actor?.login ?? 'Someone'
+      const type = eventTypeLabel(event.type)
+      return {
+        repo,
+        type,
+        actor,
+        description: describeEvent(event, actor, repo),
+        updatedAt: event.created_at ?? '',
+      }
+    })
   }
 
   // ── Profile ──────────────────────────────────────────────────────────
