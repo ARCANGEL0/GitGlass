@@ -1,9 +1,8 @@
-/* Shared types for phone views. */
-
 export interface FeedEntry {
   repo: string
   type: string
   actor: string
+  avatar?: string | null
   description: string
   updatedAt: string
 }
@@ -28,6 +27,7 @@ export interface RepoItem {
   stars: number
   forks: number
   issues: number
+  pullRequests: number
   updatedAt: string
   isPrivate: boolean
 }

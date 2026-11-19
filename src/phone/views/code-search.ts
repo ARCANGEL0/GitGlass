@@ -1,9 +1,3 @@
-/* Phone code search view — search GitHub for repositories, files, code,
-issues, pull requests, and users.
-
-Shows concise results with enough information to identify each result.
-*/
-
 import { createElement } from '../../dom'
 
 export interface SearchResultItem {

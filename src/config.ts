@@ -1,19 +1,6 @@
-/* Configuration for the GitHub G2 app.
-
-Everything the user might want to change lives here. The app reads
-app.json for its identity (name, package id, version) and keeps the
-rest in memory, persisted through the state store.
-
-Nothing is hardcoded that a user would reasonably want to set
-themselves: the GitHub API address, how often we poll, how long we
-cache, how bright the glasses text glows, which modules are on, what
-the welcome screen says.
-*/
-
 import type { ModulePrefs, DisplayPrefs } from './types'
 
 export interface AppConfig {
-  // Identity — comes from app.json, read-only at runtime
   appName: string
   packageId: string
   version: string
@@ -44,11 +31,9 @@ export interface AppConfig {
   // Timing
   clockTickMs: number
 
-  // User preferences (persisted)
   modules: ModulePrefs
   display: DisplayPrefs
 
-  // Messages (user-editable copy)
   welcomeTitle: string
   welcomeBody: string[]
   notConnected: string
@@ -61,7 +46,7 @@ export interface AppConfig {
 export const DEFAULT_CONFIG: AppConfig = {
   appName: 'GitHub G2',
   packageId: 'com.arcxlo.githubg2',
-  version: '1.3.1',
+  version: '1.3.5',
   apiBase: 'https://api.github.com',
   scopes: ['repo:read', 'pull_requests:read', 'issues:read', 'notifications:read', 'actions:read'],
   cacheTtlMs: 5 * 60_000,
@@ -88,13 +73,14 @@ export const DEFAULT_CONFIG: AppConfig = {
     collabPrs: false,
     explore: false,
     myRepositories: true,
+    contribution: true,
     codeSearch: false,
     actions: false,
     profile: false,
   },
   display: { compact: true, showBadges: true },
   welcomeTitle: '[ GITHUB ]',
-  welcomeBody: ['Not connected yet', 'Open the phone app to', 'link your GitHub account'],
+  welcomeBody: ['Please continue setup', 'in the Even phone app', 'to connect GitHub'],
   notConnected: 'Not connected',
   connectPrompt: 'Open the phone app to link your GitHub account',
   errorTitle: 'Error',
@@ -108,6 +94,7 @@ export const DEFAULT_CONFIG: AppConfig = {
       collabPrs: 'Collab PRs',
       explore: 'Explore',
       myRepositories: 'My Repositories',
+      contribution: 'Contribution',
       codeSearch: 'Code Search',
       actions: 'Actions',
       profile: 'Profile',
@@ -116,7 +103,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
 }
 
-/** Build a config from user-supplied overrides, filling the rest with defaults. */
 export function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return { ...DEFAULT_CONFIG, ...overrides }
 }

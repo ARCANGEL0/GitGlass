@@ -1,9 +1,3 @@
-/* Phone collab PRs view — PRs from collaborators on repos owned by the user.
-
-Prioritizes collaborative development. Shows repo, number, title, author,
-created/updated dates, review status, mergeability, requested reviewers.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 

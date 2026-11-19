@@ -1,14 +1,3 @@
-/* GitHub REST API client for the G2 app.
-
-Read-only, independently testable, and decoupled from the UI layer.
-Respects GitHub rate limits, paginates results, retries transient failures,
-and never logs credentials or private repository content.
-
-api.github.com supports CORS for browser requests, so direct fetch works
-from the Even Hub WebView when a User-Agent header is set (GitHub rejects
-requests without one) and the PAT is passed in the Authorization header.
-*/
-
 const API_BASE = 'https://api.github.com'
 const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -169,7 +158,8 @@ export class GitHubClient {
     perPage = 30,
     opts: FetchOptions = {},
   ): Promise<PagedResult<T>> {
-    const url = `${API_BASE}${path}?per_page=${perPage}&page=${page}`
+    const separator = path.includes('?') ? '&' : '?'
+    const url = `${API_BASE}${path}${separator}per_page=${perPage}&page=${page}`
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
 

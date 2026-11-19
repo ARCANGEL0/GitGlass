@@ -1,16 +1,6 @@
-/* Phone application shell.
-
-Renders the phone-side UI into the DOM, driven by the shared StateStore and
-GitHub API client. The glasses runtime is wired separately in main.ts; both
-surfaces share the same state.
-
-Views: landing, connect, dashboard, modules, settings, plus one screen per
-GitHub module (feed, pull requests, notifications, issues, collab PRs,
-explore, my repositories, code search, actions, profile).
-*/
-
 import { StateStore } from '../state/store'
 import { GitHubClient } from '../github/client'
+import { ActivityService } from '../github/activity'
 import { GitHubAuth } from '../github/auth'
 import { UsersService } from '../github/users'
 import { RepositoriesService } from '../github/repositories'
@@ -28,6 +18,7 @@ import { renderFeed } from './views/feed'
 import { renderProfile } from './views/profile'
 import { renderMyRepositories } from './views/my-repositories'
 import { renderPullRequests } from './views/pull-requests'
+import { renderContribution } from './views/contribution'
 import { renderNotifications } from './views/notifications'
 import { renderIssues } from './views/issues'
 import { renderCollabPrs } from './views/collab-prs'
@@ -44,6 +35,7 @@ type View =
   | 'feed'
   | 'profile'
   | 'myRepositories'
+  | 'contribution'
   | 'pullRequests'
   | 'notifications'
   | 'issues'
@@ -52,10 +44,12 @@ type View =
   | 'codeSearch'
   | 'actions'
 
-type FeedEntry = { repo: string; type: string; actor: string; description: string; updatedAt: string }
+type FeedEntry = { repo: string; type: string; actor: string; avatar?: string | null; summary?: string; description: string; updatedAt: string; url: string }
+type FeedRepo = { fullName: string; description?: string | null; language?: string | null; stars: number; forks: number }
 type ProfileUser = { login: string; name?: string | null; avatar?: string | null; public_repos: number; followers: number; following: number }
-type RepoItem = { fullName: string; name: string; description?: string | null; language?: string | null; stars: number; forks: number; issues: number; updatedAt: string; isPrivate: boolean }
+type RepoItem = { fullName: string; name: string; description?: string | null; language?: string | null; stars: number; forks: number; issues: number; pullRequests: number; updatedAt: string; isPrivate: boolean }
 type PullRequestItem = { repo: string; number: number; title: string; state: 'open' | 'closed' | 'merged'; draft: boolean; author: string; reviewStatus: 'none' | 'approved' | 'changes-requested' | 'commented'; updatedAt: string }
+type ContributionItem = { repo: string; number: number; title: string; state: 'open' | 'closed' | 'merged'; author: string; updatedAt: string; htmlUrl?: string }
 type NotificationItem = { repository: string; subject: string; type: string; reason: string; unread: boolean; updatedAt: string }
 type IssueItem = { repo: string; number: number; title: string; state: 'open' | 'closed'; author: string; labels: Array<{ name: string }>; assignee?: string | null; updatedAt: string }
 type CollabPrItem = { repo: string; number: number; title: string; author: string; createdAt: string; updatedAt: string; reviewStatus: 'none' | 'approved' | 'changes-requested' | 'commented'; mergeable: boolean | null; draft: boolean; requestedReviewers: string[] }
@@ -63,7 +57,7 @@ type RepoOverview = { name: string; owner: string; description?: string | null; 
 type SearchResultItem = { type: 'repository' | 'issue' | 'pull_request' | 'user' | 'code'; name: string; fullName?: string; owner?: string; description?: string | null; url: string }
 type WorkflowRunItem = { name: string; repository: string; branch: string; status: 'queued' | 'in_progress' | 'completed'; conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null; event: string; createdAt: string }
 
-function eventTypeLabel(type: string): string {
+function eventTypeLabel(type: string, owned = false): string {
   const labels: Record<string, string> = {
     CommitCommentEvent: 'Commented',
     CreateEvent: 'Created',
@@ -82,40 +76,45 @@ function eventTypeLabel(type: string): string {
     StarEvent: 'Starred',
     WatchEvent: 'Starred',
   }
+  if (type === 'WatchEvent' || type === 'StarEvent') return owned ? 'starred your repository' : 'starred a repository'
+  if (type === 'ForkEvent') return owned ? 'forked your repository' : 'forked a repository'
   return labels[type] ?? type.replace(/Event$/, '')
 }
 
-function describeEvent(event: any, actor: string, repo: string): string {
-  const action = event.payload?.action
-  switch (event.type) {
-    case 'PushEvent': {
-      const count = event.payload?.size ?? event.payload?.commits?.length
-      return `${actor} pushed ${count ? `${count} ${count === 1 ? 'commit' : 'commits'}` : 'new commits'} to ${repo}`
+function feedEventContent(event: any): { summary: string; description: string } {
+  const payload = event.payload ?? {}
+  if (payload.release) {
+    return {
+      summary: payload.release.name ?? payload.release.tag_name ?? '',
+      description: payload.release.body ?? '',
     }
-    case 'WatchEvent':
-    case 'StarEvent':
-      return `${actor} starred ${repo}`
-    case 'ForkEvent':
-      return `${actor} forked ${repo}`
-    case 'IssuesEvent':
-      return `${actor} ${action ?? 'updated'} an issue in ${repo}`
-    case 'IssueCommentEvent':
-      return `${actor} commented on an issue in ${repo}`
-    case 'PullRequestEvent':
-      return `${actor} ${action ?? 'updated'} a pull request in ${repo}`
-    case 'PullRequestReviewEvent':
-      return `${actor} reviewed a pull request in ${repo}`
-    case 'ReleaseEvent':
-      return `${actor} published a release for ${repo}`
-    case 'CreateEvent':
-      return `${actor} created ${event.payload?.ref_type ?? 'new content'} in ${repo}`
-    case 'DeleteEvent':
-      return `${actor} deleted ${event.payload?.ref_type ?? 'content'} in ${repo}`
-    case 'FollowEvent':
-      return `${actor} followed an account`
-    default:
-      return `${actor} updated ${repo}`
   }
+  if (payload.pull_request) {
+    return {
+      summary: `#${payload.pull_request.number ?? payload.number} ${payload.pull_request.title ?? ''}`.trim(),
+      description: payload.pull_request.body ?? '',
+    }
+  }
+  if (payload.issue) {
+    return {
+      summary: `#${payload.issue.number ?? payload.number} ${payload.issue.title ?? ''}`.trim(),
+      description: payload.issue.body ?? '',
+    }
+  }
+  if (payload.forkee?.full_name) return { summary: payload.forkee.full_name, description: '' }
+  if (payload.commits?.length) {
+    return {
+      summary: payload.commits[0].message?.split('\n')[0] ?? '',
+      description: payload.commits.slice(1).map((commit: any) => commit.message ?? '').filter(Boolean).join('\n'),
+    }
+  }
+  if (event.type === 'WatchEvent' || event.type === 'StarEvent') {
+    return { summary: '', description: event.repositoryDescription ?? '' }
+  }
+  if (event.type === 'IssueCommentEvent') {
+    return { summary: '', description: payload.comment?.body ?? '' }
+  }
+  return { summary: '', description: '' }
 }
 
 export class PhoneApp {
@@ -129,8 +128,10 @@ export class PhoneApp {
   private notifications: NotificationsService
   private search: SearchService
   private actions: ActionsService
+  private activity: ActivityService
   private view: View = 'landing'
   private root: HTMLElement
+  private renderVersion = 0
 
   constructor(root: HTMLElement, store: StateStore, client: GitHubClient) {
     this.root = root
@@ -144,6 +145,7 @@ export class PhoneApp {
     this.notifications = new NotificationsService(client)
     this.search = new SearchService(client)
     this.actions = new ActionsService(client)
+    this.activity = new ActivityService(client)
     this.view = 'landing'
     this.root = root
     this.connectError = null
@@ -182,17 +184,22 @@ export class PhoneApp {
   }
 
   private async render(): Promise<void> {
+    const renderVersion = ++this.renderVersion
+    const mount = (element: HTMLElement): void => {
+      if (renderVersion !== this.renderVersion) return
+      this.root.innerHTML = ''
+      this.root.appendChild(element)
+    }
     const state = this.state
-    this.root.innerHTML = ''
 
     switch (this.view) {
       case 'landing':
-        this.root.appendChild(
+        mount(
           renderLanding({ onConnect: () => this.navigate('connect') }),
         )
         break
       case 'connect':
-        this.root.appendChild(
+        mount(
           renderConnect({
             onSubmit: token => {
               void this.handleConnect(token)
@@ -214,7 +221,8 @@ export class PhoneApp {
           return
         }
         const user = await this.fetchProfile()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderDashboard({
             user: {
               login: state.userLogin,
@@ -231,7 +239,7 @@ export class PhoneApp {
         break
       }
       case 'modules':
-        this.root.appendChild(
+        mount(
           renderModules({
             prefs: state.modules,
             onChange: prefs => this.store.set({ modules: prefs }),
@@ -240,7 +248,7 @@ export class PhoneApp {
         )
         break
       case 'settings':
-        this.root.appendChild(
+        mount(
           renderSettings({
             display: state.display,
             onChange: display => this.store.set({ display }),
@@ -249,19 +257,23 @@ export class PhoneApp {
         )
         break
       case 'feed': {
-        const entries = await this.fetchFeed()
-        this.root.appendChild(
+        const { entries, trending, popular } = await this.fetchFeed()
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderFeed({
             entries,
+            trending,
+            popular,
             onBack: () => this.navigate('dashboard'),
-            onEntry: () => {},
+            onEntry: entry => window.open(entry.url, '_blank', 'noopener,noreferrer'),
           }),
         )
         break
       }
       case 'profile': {
         const user = await this.fetchProfile()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderProfile({
             user: {
               login: state.userLogin ?? '',
@@ -278,7 +290,8 @@ export class PhoneApp {
       }
       case 'myRepositories': {
         const repos = await this.fetchMyRepos()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderMyRepositories({
             repos,
             onBack: () => this.navigate('dashboard'),
@@ -287,9 +300,24 @@ export class PhoneApp {
         )
         break
       }
+      case 'contribution': {
+        const items = await this.fetchContributions()
+        if (renderVersion !== this.renderVersion) return
+        mount(
+          renderContribution({
+            items,
+            onBack: () => this.navigate('dashboard'),
+            onItem: item => {
+              if (item.htmlUrl) window.open(item.htmlUrl, '_blank', 'noopener,noreferrer')
+            },
+          }),
+        )
+        break
+      }
       case 'pullRequests': {
         const prs = await this.fetchPullRequests()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderPullRequests({
             prs,
             onBack: () => this.navigate('dashboard'),
@@ -300,7 +328,8 @@ export class PhoneApp {
       }
       case 'notifications': {
         const notifications = await this.fetchNotifications()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderNotifications({
             notifications,
             onBack: () => this.navigate('dashboard'),
@@ -311,7 +340,8 @@ export class PhoneApp {
       }
       case 'issues': {
         const issues = await this.fetchIssues()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderIssues({
             issues,
             onBack: () => this.navigate('dashboard'),
@@ -322,7 +352,8 @@ export class PhoneApp {
       }
       case 'collabPrs': {
         const prs = await this.fetchCollabPrs()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderCollabPrs({
             prs,
             onBack: () => this.navigate('dashboard'),
@@ -333,7 +364,8 @@ export class PhoneApp {
       }
       case 'explore': {
         const repos = await this.fetchExplore()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderExplore({
             repos,
             onBack: () => this.navigate('dashboard'),
@@ -344,7 +376,8 @@ export class PhoneApp {
       }
       case 'codeSearch': {
         const results = await this.fetchCodeSearch()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderCodeSearch({
             results,
             query: 'typescript',
@@ -356,7 +389,8 @@ export class PhoneApp {
       }
       case 'actions': {
         const runs = await this.fetchActions()
-        this.root.appendChild(
+        if (renderVersion !== this.renderVersion) return
+        mount(
           renderActions({
             runs,
             onBack: () => this.navigate('dashboard'),
@@ -402,26 +436,67 @@ export class PhoneApp {
 
   // ── Feed ─────────────────────────────────────────────────────────────
 
-  private async fetchFeed(): Promise<FeedEntry[]> {
+  private async fetchFeed(): Promise<{ entries: FeedEntry[]; trending: FeedRepo[]; popular: FeedRepo[] }> {
     const login = this.state.userLogin
-    if (!login) return []
+    if (!login) return { entries: [], trending: [], popular: [] }
 
-    const events = await this.client
-      .collect<any>(`/users/${encodeURIComponent(login)}/received_events`, { perPage: 20, maxPages: 2 })
-      .catch(() => [] as any[])
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const [events, followed] = await Promise.all([
+      this.activity.forFeed(login),
+      this.client.collect<any>(`/users/${encodeURIComponent(login)}/following`, { perPage: 10, maxPages: 1 }).catch(() => [] as any[]),
+    ])
+    const followedRepos = await Promise.all(followed.slice(0, 6).map(user => (
+      this.client.collect<any>(`/users/${encodeURIComponent(user.login)}/repos?type=owner&sort=updated`, { perPage: 30, maxPages: 1 })
+        .catch(() => [] as any[])
+    )))
+    const projects = [...new Map(followedRepos.flat()
+      .filter(repo => !repo.fork)
+      .map(repo => [repo.full_name, repo])).values()].slice(0, 5)
+    const popular = [...projects]
+      .sort((a, b) => (b.stargazers_count ?? 0) - (a.stargazers_count ?? 0))
+      .slice(0, 5)
+    const trending = projects
+      .filter(repo => Date.parse(repo.pushed_at ?? '') >= Date.parse(since))
+      .sort((a, b) => (b.stargazers_count ?? 0) - (a.stargazers_count ?? 0))
+      .slice(0, 5)
 
-    return events.slice(0, 20).map(event => {
+    const entries = events.slice(0, 40).map(event => {
       const repo = event.repo?.name ?? 'GitHub'
       const actor = event.actor?.display_login ?? event.actor?.login ?? 'Someone'
-      const type = eventTypeLabel(event.type)
+      const owned = Boolean(event.isOwnedRepository)
+      const type = eventTypeLabel(event.type, owned)
+      const content = feedEventContent(event)
       return {
         repo,
         type,
         actor,
-        description: describeEvent(event, actor, repo),
+        avatar: event.actor?.avatar_url ?? null,
+        ...content,
         updatedAt: event.created_at ?? '',
+        url: event.payload?.pull_request?.html_url
+          ?? event.payload?.issue?.html_url
+          ?? event.payload?.release?.html_url
+          ?? `https://github.com/${repo}`,
       }
     })
+
+    return {
+      entries,
+      trending: trending.map(repo => ({
+        fullName: repo.full_name ?? repo.name,
+        description: repo.description,
+        language: repo.language,
+        stars: repo.stargazers_count ?? 0,
+        forks: repo.forks_count ?? 0,
+      })),
+      popular: popular.map(repo => ({
+        fullName: repo.full_name ?? repo.name,
+        description: repo.description,
+        language: repo.language,
+        stars: repo.stargazers_count ?? 0,
+        forks: repo.forks_count ?? 0,
+      })),
+    }
   }
 
   // ── Profile ──────────────────────────────────────────────────────────
@@ -442,7 +517,21 @@ export class PhoneApp {
   // ── My Repositories ──────────────────────────────────────────────────
 
   private async fetchMyRepos(): Promise<RepoItem[]> {
-    const repos = await this.repos.list().catch(() => [] as any[])
+    const [repos, prs] = await Promise.all([
+      this.repos.list().catch(() => [] as any[]),
+      this.pulls.onMyRepositories(this.state.userLogin ?? '', { perPage: 100, maxPages: 3 }).catch(() => [] as any[]),
+    ])
+    const issues = await this.issues.listForMyRepositories(this.state.userLogin ?? '', { perPage: 100, maxPages: 3 }).catch(() => [] as any[])
+    const prCounts = new Map<string, number>()
+    for (const pr of prs) {
+      const repo = pr.repository_url?.split('/repos/')[1]
+      if (repo) prCounts.set(repo, (prCounts.get(repo) ?? 0) + 1)
+    }
+    const issueCounts = new Map<string, number>()
+    for (const issue of issues) {
+      const repo = issue.repository?.full_name ?? issue.repository_url?.split('/repos/')[1]
+      if (repo) issueCounts.set(repo, (issueCounts.get(repo) ?? 0) + 1)
+    }
     return repos.map(r => ({
       fullName: r.full_name,
       name: r.name,
@@ -450,7 +539,8 @@ export class PhoneApp {
       language: r.language,
       stars: r.stargazers_count,
       forks: r.forks_count,
-      issues: r.open_issues_count,
+      issues: issueCounts.get(r.full_name) ?? 0,
+      pullRequests: prCounts.get(r.full_name) ?? 0,
       updatedAt: r.updated_at,
       isPrivate: r.private,
     }))
@@ -459,14 +549,14 @@ export class PhoneApp {
   // ── Pull Requests ────────────────────────────────────────────────────
 
   private async fetchPullRequests(): Promise<PullRequestItem[]> {
-    const prs = await this.pulls.createdByMe().catch(() => [] as any[])
+    const prs = await this.pulls.onMyRepositories(this.state.userLogin ?? '').catch(() => [] as any[])
     return prs.map(p => ({
-      repo: p.head.repo?.full_name ?? p.head.ref,
+      repo: p.repository_url?.split('/repos/')[1] ?? 'unknown',
       number: p.number,
       title: p.title,
       state: p.state as 'open' | 'closed' | 'merged',
       draft: p.draft,
-      author: p.user.login,
+      author: p.user?.login ?? this.state.userLogin ?? '',
       reviewStatus: 'none' as const,
       updatedAt: p.updated_at,
     }))
@@ -489,35 +579,55 @@ export class PhoneApp {
   // ── Issues ───────────────────────────────────────────────────────────
 
   private async fetchIssues(): Promise<IssueItem[]> {
-    const issues = await this.issues.list().catch(() => [] as any[])
-    return issues.map(i => ({
-      repo: i.repository_url.split('/repos/')[1] ?? 'unknown',
+    const issues = await this.issues.listForMyRepositories(this.state.userLogin ?? '').catch(() => [] as any[])
+    return issues.filter(i => !i.pull_request).map(i => ({
+      repo: i.repository?.full_name ?? i.repository_url?.split('/repos/')[1] ?? 'unknown',
       number: i.number,
       title: i.title,
       state: i.state as 'open' | 'closed',
-      author: i.user.login,
-      labels: i.labels.map((l: any) => ({ name: l.name })),
+      author: i.user?.login ?? '',
+      labels: (i.labels ?? []).map((l: any) => ({ name: l.name })),
       assignee: i.assignee?.login ?? null,
       updatedAt: i.updated_at,
+    }))
+  }
+
+  private async fetchContributions(): Promise<ContributionItem[]> {
+    const prs = await this.pulls.createdByMe(this.state.userLogin ?? '').catch(() => [] as any[])
+    return prs.map(p => ({
+      repo: p.repository_url?.split('/repos/')[1] ?? 'unknown',
+      number: p.number,
+      title: p.title,
+      state: p.pull_request?.merged_at ? 'merged' : p.state as 'open' | 'closed',
+      author: p.user?.login ?? this.state.userLogin ?? '',
+      updatedAt: p.updated_at ?? p.created_at ?? '',
+      htmlUrl: p.html_url,
     }))
   }
 
   // ── Collab PRs ───────────────────────────────────────────────────────
 
   private async fetchCollabPrs(): Promise<CollabPrItem[]> {
-    const prs = await this.pulls.createdByMe().catch(() => [] as any[])
-    return prs.map(p => ({
-      repo: p.head.repo?.full_name ?? p.head.ref,
-      number: p.number,
-      title: p.title,
-      author: p.user.login,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      reviewStatus: 'none' as const,
-      mergeable: null,
-      draft: p.draft,
-      requestedReviewers: [],
-    }))
+    const repos = await this.repos.list({ perPage: 10, maxPages: 2 }).catch(() => [] as any[])
+    const prs: any[] = []
+    for (const repo of repos.slice(0, 5)) {
+      const repoPrs = await this.pulls.listForRepo(repo.full_name, { perPage: 10, maxPages: 1 }).catch(() => [] as any[])
+      prs.push(...repoPrs.map(p => ({ ...p, repo: repo.full_name })))
+    }
+    return prs
+      .filter(p => p.user?.login?.toLowerCase() !== this.state.userLogin?.toLowerCase())
+      .map(p => ({
+        repo: p.repo,
+        number: p.number,
+        title: p.title,
+        author: p.user?.login ?? '',
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        reviewStatus: 'none' as const,
+        mergeable: null,
+        draft: p.draft,
+        requestedReviewers: [],
+      }))
   }
 
   // ── Explore ──────────────────────────────────────────────────────────

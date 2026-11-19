@@ -1,9 +1,3 @@
-/* Phone connected dashboard.
-
-Shows the authenticated user's profile summary and navigation to every module.
-Each module card is clickable and opens the full module view.
-*/
-
 import { createElement } from '../../dom'
 
 export interface DashboardProps {
@@ -22,6 +16,7 @@ const MODULE_CARDS = [
   { id: 'collabPrs', label: 'Collab PRs', desc: 'PRs others made on your repos' },
   { id: 'explore', label: 'Trending', desc: 'Trending repositories with details' },
   { id: 'myRepositories', label: 'My Repositories', desc: 'Browse your repos and their contents' },
+  { id: 'contribution', label: 'Contribution', desc: 'Pull requests you made' },
   { id: 'codeSearch', label: 'Code Search', desc: 'Search code across GitHub' },
   { id: 'actions', label: 'Actions', desc: 'Workflow runs' },
   { id: 'profile', label: 'Profile', desc: 'Your GitHub profile' },

@@ -1,5 +1,3 @@
-/* GitHub Actions service (read-only). */
-
 import { GitHubClient } from './client'
 
 export interface WorkflowRun {

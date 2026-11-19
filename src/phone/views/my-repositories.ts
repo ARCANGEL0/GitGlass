@@ -1,9 +1,3 @@
-/* Phone my-repositories view — repositories belonging to the authenticated user.
-
-Lists each repo with name, description, language, stars, forks, open issues,
-and last updated. Tap a repo to open its details.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 
@@ -15,6 +9,7 @@ export interface RepoItem {
   stars: number
   forks: number
   issues: number
+  pullRequests: number
   updatedAt: string
   isPrivate: boolean
 }
@@ -30,12 +25,13 @@ export function renderMyRepositories({ repos, onBack, onRepo }: MyRepositoriesPr
 
   const rows = repos.map(r => `
     <div class="repo-row" data-index="${repos.indexOf(r)}">
-      <div class="repo-name">${r.fullName}</div>
+      <div class="repo-name">${r.fullName} [${r.isPrivate ? 'private' : 'public'}]</div>
       ${r.description ? `<div class="repo-desc">${r.description}</div>` : ''}
       <div class="repo-meta">
         ${r.language ? `<span class="repo-lang">${r.language}</span>` : ''}
         <span>Stars ${r.stars}</span>
         <span>Forks ${r.forks}</span>
+        <span>PRs ${r.pullRequests}</span>
         <span>Issues ${r.issues}</span>
         <span class="repo-updated">Updated ${formatDate(r.updatedAt)}</span>
       </div>

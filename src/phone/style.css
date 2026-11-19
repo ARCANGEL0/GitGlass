@@ -1,5 +1,3 @@
-/* Phone companion app styles — GitHub-inspired, dark by default. */
-
 :root {
   --bg: #0d1117;
   --card: #161b22;
@@ -381,8 +379,6 @@ body {
   font-size: 12px;
   color: var(--text-dim);
 }
-
-/* Refined phone surface -------------------------------------------------- */
 
 :root {
   --bg: #0b0e13;
@@ -903,13 +899,11 @@ input:focus-visible {
 
 .repo-desc,
 .search-desc {
-  display: -webkit-box;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1.4;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .repo-lang,
@@ -1006,6 +1000,148 @@ input:focus-visible {
 
 .toggle input:checked + .toggle-slider:before {
   transform: translateX(14px);
+}
+
+.feed-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feed-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.feed-entry:hover,
+.feed-entry:focus-visible {
+  background: var(--surface);
+}
+
+.feed-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.feed-avatar-fallback {
+  background: var(--surface-raised);
+}
+
+.feed-actor-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feed-activity-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.feed-activity-line strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feed-repo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  border-radius: 5px;
+  background: var(--surface-raised);
+}
+
+.feed-repo {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feed-summary {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.feed-desc {
+  display: block;
+  overflow: visible;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.feed-trending {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.feed-trending h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.feed-trending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feed-trending-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.feed-trending-card strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.feed-trending-card > span {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.feed-trending-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--text-dim) !important;
+  font-size: 12px !important;
 }
 
 @media (max-width: 420px) {

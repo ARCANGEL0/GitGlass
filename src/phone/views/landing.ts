@@ -1,10 +1,3 @@
-/* Phone landing page — shown before GitHub authentication.
-
-Dark by default, neutral background, green accent, rounded cards.
-Explains the G2 integration and security model, then offers the Connect
-GitHub button.
-*/
-
 import { createElement } from '../../dom'
 
 export interface LandingProps {

@@ -22,13 +22,11 @@ export interface Screen {
   kind: ScreenKind
   module: string
   title: string
-  // itemList: the items and selected index
-  items?: Array<{ id: string; primary: string; secondary?: string }>
+  items?: Array<{ id: string; primary: string; secondary?: string; details?: string[] }>
   selectedIndex?: number
-  // detail: paged sections
   sections?: Array<{ label: string; lines: string[] }>
   sectionIndex?: number
-  // payload for detail/diff
+  detailOffset?: number
   payload?: unknown
 }
 

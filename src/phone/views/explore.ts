@@ -1,10 +1,3 @@
-/* Phone explore view — GitHub discovery.
-
-Browse trending, popular, recently created repositories, programming
-languages, topics, developer profiles. Each repo shows name, owner,
-description, language, stars, forks, open issues, updated time.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 

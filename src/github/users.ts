@@ -1,5 +1,3 @@
-/* GitHub user / profile service. */
-
 import type { GitHubUser } from '../types'
 import { GitHubClient } from './client'
 

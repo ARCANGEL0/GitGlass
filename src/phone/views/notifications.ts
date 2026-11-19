@@ -1,9 +1,3 @@
-/* Phone notifications view — GitHub notifications.
-
-Shows unread / all / participating notifications. Each entry shows
-repository, subject, reason, type, timestamp, read/unread status.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 

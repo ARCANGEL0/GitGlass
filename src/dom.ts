@@ -1,5 +1,3 @@
-/* Tiny DOM helper — create elements with attributes and children. */
-
 export function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props: { className?: string; [key: string]: unknown } = {},

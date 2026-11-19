@@ -1,162 +1,150 @@
-/* Glasses screen renderer.
-
-Each module renders to a { left, right } pair:
-  left  — fixed clock/context column (stays visible in all modes)
-  right — the active screen content
-
-All text targets the G2 canvas (576 x 288, monochrome green, LVGL font).
-Rendering respects the G2 constraints:
-  - right column is 336 px wide, so lines are kept short (~50 chars)
-  - textColor 0..4 for brightness hierarchy
-  - borders and selection markers ("> ") instead of color meaning
-  - pagination across multiple screens
-
-Render helpers produce compact, single-purpose strings. The glasses runtime
-in even.ts handles sending them via textContainerUpgrade.
-*/
-
 import type { AppConfig } from '../config'
 
 function makeRenderer(config: AppConfig) {
   const { brightText, dimText, normalText } = config
 
-  function line(text: string, color = normalText): string {
-    // `§` is a cheap, glyph-safe brightness tag the runtime strips before send.
-    // It keeps brightness markup out of the measured line length.
-    return `§${color}${text}`
+  function line(text: string, _color = normalText): string {
+    return text
   }
 
-  /** Truncate a string to fit a pixel-ish budget (approx 7px per char). */
-  function fit(text: string, maxChars: number): string {
-    if (text.length <= maxChars) return text
-    return text.slice(0, maxChars - 1) + '…'
+  function wrap(text: string, maxChars: number): string[] {
+    if (!text) return ['']
+    const output: string[] = []
+    let remaining = text
+    while (remaining.length > maxChars) {
+      let split = remaining.lastIndexOf(' ', maxChars)
+      if (split < Math.floor(maxChars / 2)) split = maxChars
+      output.push(remaining.slice(0, split).trimEnd())
+      remaining = remaining.slice(split).trimStart()
+    }
+    output.push(remaining)
+    return output
   }
 
-  /** Build a left context column: clock + connection status + counts line. */
-  function contextLeft(now: Date, status: 'connected' | 'disconnected'): string {
-    const h = now.getHours()
-    const m = now.getMinutes().toString().padStart(2, '0')
-    const period = h >= 12 ? 'PM' : 'AM'
-    const h12 = h % 12 === 0 ? 12 : h % 12
-    const dot = status === 'connected' ? '●' : '○'
-    return `${line(`GITHUB  ${h12}:${m} ${period}`, brightText)}\n${line(dot + '  ' + status.toUpperCase(), dimText)}`
-  }
-
-  /** Render a scrollable list of items with a "> " selection marker on the index. */
   function listScreen(
     title: string,
-    items: Array<{ primary: string; secondary?: string }>,
+    items: Array<{ primary: string; secondary?: string; details?: string[] }>,
     selectedIndex: number,
   ): { left: string; right: string } {
-    const rows: string[] = []
-    const start = Math.max(0, selectedIndex - 3)
-    const end = Math.min(items.length, start + 6)
-    const windowStart = end - start < 6 && start > 0 ? Math.max(0, end - 6) : start
-    const windowEnd = Math.min(items.length, windowStart + 6)
-
-    for (let i = windowStart; i < windowEnd; i += 1) {
-      const item = items[i]
-      const marker = i === selectedIndex ? '> ' : '  '
-      const primary = fit(item.primary, 46)
-      rows.push(`${line(marker + primary, i === selectedIndex ? brightText : normalText)}`)
-      if (item.secondary) {
-        rows.push(line('   ' + fit(item.secondary, 44), dimText))
+    const selected = Math.max(0, Math.min(selectedIndex, Math.max(0, items.length - 1)))
+    const itemLines = (item: { primary: string; secondary?: string; details?: string[] }, index: number): string[] => {
+      const marker = index === selected ? '> ' : '  '
+      const primary = wrap(item.primary, 52)
+      const lines = [line(marker + primary[0], index === selected ? brightText : normalText)]
+      lines.push(...primary.slice(1).map(value => line('  ' + value, normalText)))
+      if (item.secondary) lines.push(...wrap(item.secondary, 54).map(value => line('   ' + value, dimText)))
+      if (index === selected && item.details) {
+        for (const detail of item.details) lines.push(...wrap(detail, 54).map(value => line('   ' + value, normalText)))
+      }
+      return lines
+    }
+    const body: string[] = []
+    if (items.length === 0) {
+      body.push(line('(none)', dimText))
+    } else {
+      const rendered = items.map((item, index) => itemLines(item, index))
+      const maxBodyLines = 8
+      let start = selected
+      let end = selected + 1
+      let used = rendered[selected]?.length ?? 0
+      let tryPrevious = selected > 0
+      while (true) {
+        const previousCost = tryPrevious && start > 0 ? rendered[start - 1].length : Infinity
+        const nextCost = end < rendered.length ? rendered[end].length : Infinity
+        if (previousCost === Infinity && nextCost === Infinity) break
+        if (tryPrevious && previousCost + used + 1 <= maxBodyLines) {
+          start -= 1
+          used += previousCost + 1
+        } else if (nextCost + used + 1 <= maxBodyLines) {
+          end += 1
+          used += nextCost + 1
+        } else if (previousCost + used + 1 <= maxBodyLines) {
+          start -= 1
+          used += previousCost + 1
+        } else {
+          break
+        }
+        tryPrevious = !tryPrevious
+      }
+      for (let index = start; index < end; index += 1) {
+        if (index > start) body.push('')
+        body.push(...rendered[index])
       }
     }
-
-    const countLine = items.length === 0
-      ? line('(none)', dimText)
-      : line(`${windowStart + 1}-${windowEnd} of ${items.length}`, dimText)
-
-    const body = rows.length === 0 ? [countLine] : [...rows, '', countLine]
     return {
-      left: contextLeft(new Date(), 'connected'),
+      left: '',
       right: `${line(title, brightText)}\n\n${body.join('\n')}`,
     }
   }
 
-  /** Render a detail screen with labelled fields. */
   function detailScreen(
     title: string,
     fields: Array<{ label: string; value: string }>,
   ): { left: string; right: string } {
     const lines: string[] = []
     for (const field of fields) {
-      const label = fit(field.label, 28)
-      const value = fit(field.value, 44)
-      lines.push(line(label, dimText))
-      lines.push(line('  ' + value, normalText))
+      lines.push(...wrap(field.label, 54).map(value => line(value, dimText)))
+      lines.push(...wrap('  ' + field.value, 54).map(value => line(value, normalText)))
       lines.push('')
     }
     return {
-      left: contextLeft(new Date(), 'connected'),
+      left: '',
       right: `${line(title, brightText)}\n\n${lines.join('\n')}`,
     }
   }
 
-  /** Render an error screen. */
   function errorScreen(message: string): { left: string; right: string } {
     return {
-      left: contextLeft(new Date(), 'disconnected'),
-      right: `${line(config.errorTitle, brightText)}\n\n${line(fit(message, 48), normalText)}`,
+      left: '',
+      right: `${line(config.errorTitle, brightText)}\n\n${wrap(message, 54).map(value => line(value, normalText)).join('\n')}`,
     }
   }
 
-  /** Render a loading screen. */
   function loadingScreen(title?: string): { left: string; right: string } {
     return {
-      left: contextLeft(new Date(), 'connected'),
+      left: '',
       right: `${line(title ?? config.loadingTitle, brightText)}\n\n${line('…', normalText)}`,
     }
   }
 
-  /** Render the welcome frame before auth. */
   function welcomeScreen(): { left: string; right: string } {
-    const boxTop = '╭──────────────────────────────╮'
-    const boxBot = '╰──────────────────────────────╯'
-    const empty = '│                              │'
     const lines = [
-      boxTop,
-      empty,
-      line(`│   ${config.welcomeTitle.padEnd(22)}   │`, brightText),
-      empty,
-      line(`│   ${config.welcomeBody[0].padEnd(22)}   │`, normalText),
-      line(`│   ${config.welcomeBody[1].padEnd(22)}   │`, normalText),
-      line(`│   ${config.welcomeBody[2].padEnd(22)}   │`, normalText),
-      empty,
-      boxBot,
+      line(config.welcomeTitle, brightText),
+      '',
+      line('NOT CONNECTED', dimText),
+      '',
+      line(config.welcomeBody[0], normalText),
+      line(config.welcomeBody[1], normalText),
+      line(config.welcomeBody[2], normalText),
     ]
     return {
-      left: contextLeft(new Date(), 'disconnected'),
+      left: '',
       right: lines.join('\n'),
     }
   }
 
-  /** Render a repo list screen for the glasses. */
   function repoListScreen(
     repos: Array<{ full_name: string; description?: string | null; language?: string | null; stargazers_count: number; forks_count: number; updated_at: string }>,
     selectedIndex: number,
   ): { left: string; right: string } {
     const items = repos.map(r => ({
       primary: r.full_name,
-      secondary: `${r.language ?? ''} ⭐${r.stargazers_count} 🍴${r.forks_count}`,
+      secondary: `${r.language ?? ''} STARS: ${r.stargazers_count} · FORKS: ${r.forks_count}`,
     }))
     return listScreen('My Repositories', items, selectedIndex)
   }
 
-  /** Render a PR list screen for the glasses. */
   function prListScreen(
     prs: Array<{ number: number; title: string; state: string; updated_at: string }>,
     selectedIndex: number,
   ): { left: string; right: string } {
     const items = prs.map(p => ({
-      primary: `#${p.number} ${fit(p.title, 40)}`,
+      primary: `#${p.number} ${p.title}`,
       secondary: `${p.state} · ${p.updated_at.slice(0, 10)}`,
     }))
     return listScreen('Pull Requests', items, selectedIndex)
   }
 
-  /** Render a notification list screen for the glasses. */
   function notificationListScreen(
     notifs: Array<{ repository: string; subject: string; unread: boolean; updated_at: string }>,
     selectedIndex: number,
@@ -168,19 +156,17 @@ function makeRenderer(config: AppConfig) {
     return listScreen('Notifications', items, selectedIndex)
   }
 
-  /** Render an issue list screen for the glasses. */
   function issueListScreen(
     issues: Array<{ number: number; title: string; state: string; updated_at: string }>,
     selectedIndex: number,
   ): { left: string; right: string } {
     const items = issues.map(i => ({
-      primary: `#${i.number} ${fit(i.title, 40)}`,
+      primary: `#${i.number} ${i.title}`,
       secondary: `${i.state} · ${i.updated_at.slice(0, 10)}`,
     }))
     return listScreen('Issues', items, selectedIndex)
   }
 
-  /** Menu entries: module id and label, in navigation order. */
   function menuEntries(): Array<{ module: string; label: string }> {
     return [
       { module: 'feed', label: 'Feed' },
@@ -190,6 +176,7 @@ function makeRenderer(config: AppConfig) {
       { module: 'collabPrs', label: 'Collab PRs' },
       { module: 'explore', label: 'Explore' },
       { module: 'myRepositories', label: 'My Repos' },
+      { module: 'contribution', label: 'Contribution' },
       { module: 'codeSearch', label: 'Code Search' },
       { module: 'actions', label: 'Actions' },
       { module: 'profile', label: 'Profile' },
@@ -197,7 +184,6 @@ function makeRenderer(config: AppConfig) {
   }
 
   return {
-    contextLeft,
     listScreen,
     detailScreen,
     errorScreen,

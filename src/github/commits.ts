@@ -1,5 +1,3 @@
-/* GitHub commit service. */
-
 import { GitHubClient } from './client'
 
 export interface CommitSummary {

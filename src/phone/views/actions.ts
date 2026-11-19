@@ -1,9 +1,3 @@
-/* Phone actions view — GitHub Actions workflow runs.
-
-Shows recent workflow runs: workflow name, repository, branch, run status,
-conclusion, trigger, timestamp. Read-only.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 

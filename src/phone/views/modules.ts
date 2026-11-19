@@ -1,9 +1,3 @@
-/* Phone module configuration view.
-
-Enable/disable individual GitHub modules. Changes persist and are reflected
-in the glasses navigation and contextual menu.
-*/
-
 import { createElement } from '../../dom'
 import type { ModulePrefs } from '../../types'
 
@@ -21,6 +15,7 @@ const MODULES: Array<{ id: keyof ModulePrefs; label: string; desc: string }> = [
   { id: 'collabPrs', label: 'Collab PRs', desc: 'PRs from collaborators on your repos' },
   { id: 'explore', label: 'Explore', desc: 'Discover trending repositories' },
   { id: 'myRepositories', label: 'My Repositories', desc: 'Your own repositories' },
+  { id: 'contribution', label: 'Contribution', desc: 'Pull requests you made' },
   { id: 'codeSearch', label: 'Code Search', desc: 'Search code across GitHub' },
   { id: 'actions', label: 'Actions', desc: 'GitHub Actions workflow runs' },
   { id: 'profile', label: 'Profile', desc: 'Your GitHub profile' },

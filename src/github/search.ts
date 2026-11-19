@@ -1,12 +1,17 @@
-/* GitHub search service. Code search requires authentication and respects the
- *  authenticated user's permissions; repository and issue search are broader.
- */
-
 import { GitHubClient } from './client'
 
 export interface SearchResult {
   total_count: number
-  items: Array<{ name: string; full_name?: string; html_url: string; owner?: { login: string } }>
+  items: Array<{
+    name: string
+    full_name?: string
+    html_url: string
+    owner?: { login: string }
+    description?: string | null
+    language?: string | null
+    stargazers_count?: number
+    forks_count?: number
+  }>
 }
 
 export class SearchService {

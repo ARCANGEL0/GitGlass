@@ -1,10 +1,3 @@
-/* Phone pull requests view — PRs relevant to the authenticated user.
-
-Groups by category: created by me, assigned to me, review requested,
-involved in, recently updated. Each entry shows repo, number, title,
-author, status, draft flag, review status, updated time.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 

@@ -1,11 +1,3 @@
-/* GitHub authentication for the G2 app.
-
-Phone-side only: the user enters a Personal Access Token, the client validates
-it against GitHub, and the token is stored in the shared state store (native
-bridge storage on the phone, in-memory fallback in preview). Tokens are never
-logged or committed.
-*/
-
 import type { GitHubUser, GitHubRepository } from '../types'
 import { GitHubClient, GitHubApiError } from './client'
 

@@ -1,8 +1,3 @@
-/* Phone settings view.
-
-Display preferences and app settings.
-*/
-
 import { createElement } from '../../dom'
 import type { DisplayPrefs } from '../../types'
 

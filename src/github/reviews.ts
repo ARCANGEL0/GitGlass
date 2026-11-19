@@ -1,5 +1,3 @@
-/* GitHub pull request review / comment service. */
-
 import { GitHubClient } from './client'
 
 export interface ReviewComment {

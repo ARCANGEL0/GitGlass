@@ -1,11 +1,3 @@
-/* Types for the GitHub G2 app.
-
-These describe the shape of GitHub REST API responses (picked fields only),
-the persisted application state, and the glasses navigation stack. Each
-interface is deliberately narrow — it holds exactly what a screen needs to
-render, nothing more.
-*/
-
 // GitHub API resource shapes (picked fields)
 
 export interface GitHubUser {
@@ -98,6 +90,7 @@ export interface ModulePrefs {
   collabPrs: boolean
   explore: boolean
   myRepositories: boolean
+  contribution: boolean
   codeSearch: boolean
   actions: boolean
   profile: boolean
@@ -126,6 +119,7 @@ export const DEFAULT_MODULES: ModulePrefs = {
   collabPrs: false,
   explore: false,
   myRepositories: true,
+  contribution: true,
   codeSearch: false,
   actions: false,
   profile: false,
@@ -156,6 +150,7 @@ export type ModuleId =
   | 'collabPrs'
   | 'explore'
   | 'myRepositories'
+  | 'contribution'
   | 'codeSearch'
   | 'actions'
   | 'profile'
@@ -173,6 +168,7 @@ export const MODULE_ORDER: NavEntry[] = [
   { module: 'collabPrs', label: 'Collab PRs' },
   { module: 'explore', label: 'Explore' },
   { module: 'myRepositories', label: 'My Repositories' },
+  { module: 'contribution', label: 'Contribution' },
   { module: 'codeSearch', label: 'Code Search' },
   { module: 'actions', label: 'Actions' },
   { module: 'profile', label: 'Profile' },
@@ -181,8 +177,8 @@ export const MODULE_ORDER: NavEntry[] = [
 // Screen renderer result
 
 export interface Screen {
-  left: string   // left column text (clock/context)
-  right: string  // right column screen text
+  left: string
+  right: string
 }
 
 // Glasses data shapes

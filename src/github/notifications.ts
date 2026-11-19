@@ -1,5 +1,3 @@
-/* GitHub notifications service. */
-
 import type { GitHubNotification } from '../types'
 import { GitHubClient } from './client'
 

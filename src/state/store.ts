@@ -63,7 +63,6 @@ export class StateStore {
     return this.state
   }
 
-  /** Read-only config. */
   getConfig(): AppConfig {
     return this.config
   }
@@ -83,7 +82,6 @@ export class StateStore {
     await this.persist()
   }
 
-  /** Reset to empty state (disconnect). */
   async reset(): Promise<void> {
     this.state = { ...EMPTY_STATE, configVersion: CONFIG_VERSION }
     this.stateRevision += 1

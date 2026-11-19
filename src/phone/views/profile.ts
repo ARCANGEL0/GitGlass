@@ -1,9 +1,3 @@
-/* Phone profile view — authenticated user's GitHub profile.
-
-Shows avatar, name, bio, company, location, repo/follower counts, and recent
-activity. Read-only.
-*/
-
 import { createElement } from '../../dom'
 
 export interface ProfileProps {

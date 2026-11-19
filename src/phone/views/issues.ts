@@ -1,10 +1,3 @@
-/* Phone issues view — issues across the user's repositories.
-
-Groups: created by me, assigned to me, mentioning me, my repositories,
-recently updated. Each issue shows repo, number, title, author, labels,
-assignee, open/closed status, timestamp.
-*/
-
 import { createElement } from '../../dom'
 import { formatDate } from './shared'
 

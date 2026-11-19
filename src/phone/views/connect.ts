@@ -1,9 +1,3 @@
-/* Phone GitHub connection view.
-
-Token input with show/hide, validation feedback, error display, and a debug
-option that shows detailed error information.
-*/
-
 import { createElement } from '../../dom'
 
 export interface ConnectProps {

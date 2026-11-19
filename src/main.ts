@@ -1,17 +1,3 @@
-/* GitHub G2 — main entry.
-
-Two surfaces share one state store:
-
-1. Phone companion: renders into the DOM (landing, connect, dashboard,
-   modules, settings). Drives GitHub authentication and persists state.
-2. Even G2 glasses: renders through the SDK containers (welcome frame,
-   then modules once authenticated). Reads the same state store.
-
-The glasses runtime and the phone app both subscribe to the store, so a
-change on the phone (e.g. disabling a module) is reflected on the
-glasses without a page reload.
-*/
-
 import { StateStore } from './state/store'
 import { GitHubClient } from './github/client'
 import { PhoneApp } from './phone/app'
@@ -26,13 +12,15 @@ const store = new StateStore({ ...EMPTY_STATE, configVersion: 1 }, config)
 const client = new GitHubClient(null, config.cacheTtlMs)
 
 async function main(): Promise<void> {
-  // Phone app renders immediately into the DOM.
+  const viteEnv = (import.meta as ImportMeta & {
+    env?: { DEV?: boolean; VITE_DEMO_TOKEN?: string }
+  }).env
+  const demoToken = viteEnv?.DEV ? viteEnv.VITE_DEMO_TOKEN : undefined
   const root = document.querySelector('#app') as HTMLElement
   if (!root) throw new Error('App root missing')
   const phone = new PhoneApp(root, store, client)
   void phone.start()
 
-  // Build the contextual menu from enabled modules.
   const modules = store.getConfig().modules
   const menu: { id: number; label: string }[] = []
   let id = 1
@@ -46,6 +34,7 @@ async function main(): Promise<void> {
         collabPrs: 'Collab PRs',
         explore: 'Explore',
         myRepositories: 'My Repos',
+        contribution: 'Contribution',
         codeSearch: 'Code Search',
         actions: 'Actions',
         profile: 'Profile',
@@ -55,11 +44,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // Glasses app starts once the Even bridge is ready.
   const runtime = await connectGitHubRuntime({
     config,
     menu,
-    initialLeft: `GITHUB G2\n00:00`,
+    initialLeft: '',
     initialRight: welcomeScreenRight(config),
   })
 
@@ -72,11 +60,26 @@ async function main(): Promise<void> {
     (key, value) => runtime.setStorage(key, value),
   )
 
-  glasses.bind()
+  if (demoToken) {
+    client.setToken(demoToken)
+    let userLogin: string | null = null
+    try {
+      const user = await client.get<{ login?: string }>('/user')
+      userLogin = user.login ?? null
+    } catch {}
+    await store.set({ token: demoToken, userLogin, syncedAt: Date.now() })
+  }
 
-  runtime.onDoubleTap(() => {
-    glasses.exitRequested()
-  })
+  const restored = store.get()
+  client.setToken(restored.token)
+  if (restored.token && !restored.userLogin) {
+    try {
+      const user = await client.get<{ login?: string }>('/user')
+      if (user.login) await store.set({ userLogin: user.login })
+    } catch {}
+  }
+
+  glasses.bind()
 
   runtime.onForeground(() => {
     glasses.refresh()
@@ -86,19 +89,12 @@ async function main(): Promise<void> {
 }
 
 function welcomeScreenRight(config: ReturnType<typeof makeConfig>): string {
-  const boxTop = '╭──────────────────────────────╮'
-  const boxBot = '╰──────────────────────────────╯'
-  const empty = '│                              │'
   const lines = [
-    boxTop,
-    empty,
-    `│   ${config.welcomeTitle.padEnd(22)}   │`,
-    empty,
-    `│   ${config.welcomeBody[0].padEnd(22)}   │`,
-    `│   ${config.welcomeBody[1].padEnd(22)}   │`,
-    `│   ${config.welcomeBody[2].padEnd(22)}   │`,
-    empty,
-    boxBot,
+    config.welcomeTitle,
+    '',
+    'NOT CONNECTED',
+    '',
+    ...config.welcomeBody,
   ]
   return lines.join('\n')
 }
