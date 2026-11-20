@@ -11,7 +11,7 @@ import { ActivityService } from '../github/activity'
 import { NavStack, type ListItem, type Screen } from './navigation'
 import { Hud, type HudView } from './hud/display'
 import type { IconName } from './hud/art'
-import { BODY_LINES, HINT_LINES, TEXT_BOXES, type BoxScroll } from './hud/pages'
+import { BODY_LINES, HINT_LINES, TEXT_BOXES } from './hud/pages'
 import { SEP, alignRight, lines, oneLine, row, truncate, wrap } from './hud/text'
 import type { AppState, ModuleId } from '../types'
 import type { AppConfig } from '../config'
@@ -116,9 +116,9 @@ function relativeTime(iso: string): string {
   return `${weeks} week${weeks === 1 ? '' : 's'} ago`
 }
 
-function pullRequestState(item: any): string {
-  if (item.pull_request?.merged_at) return 'MERGED'
-  return String(item.state ?? 'open').toUpperCase()
+function prIcon(item: any): IconName {
+  if (item.pull_request?.merged_at || item.merged_at) return 'check'
+  return item.state === 'closed' ? 'cross' : 'pull'
 }
 
 function feedEventPrimary(event: any): string {
@@ -166,7 +166,8 @@ export class GlassesApp {
   private hud: Hud
   private stack = new NavStack()
   private state: AppState
-  private itemsCache = new Map<string, any[]>()
+  private itemsCache = new Map<string, ListItem[]>()
+  private prefetching = new Set<string>()
   private activity: ActivityService
   private feedEvents = new Map<string, any>()
   private feedPage = 1
@@ -293,7 +294,7 @@ export class GlassesApp {
     }
   }
 
-  private box(icon: IconName, title: string, body: string[], hint: string[], scroll?: BoxScroll, count = ''): HudView {
+  private box(icon: IconName, title: string, body: string[], hint: string[], count = '', rowIcons: Array<IconName | null> = []): HudView {
     return {
       kind: 'box',
       icon,
@@ -301,7 +302,7 @@ export class GlassesApp {
       count: count ? alignRight(count, COUNT_PX) : ' ',
       body: lines(body, BODY_LINES),
       hint: lines(hint.map(h => truncate(h, HINT_PX)), HINT_LINES),
-      scroll,
+      rowIcons,
     }
   }
 
@@ -388,16 +389,15 @@ export class GlassesApp {
     }
     const cursor = Math.min(screen.selectedIndex ?? 0, items.length - 1)
     const start = Math.floor(cursor / BODY_LINES) * BODY_LINES
-    const rows = items.slice(start, start + BODY_LINES).map((item, i) => {
+    const page = items.slice(start, start + BODY_LINES)
+    const withIcons = page.some(item => item.icon)
+    const rows = page.map((item, i) => {
       const label = item.secondary ? `${item.primary}${SEP}${item.secondary}` : item.primary
-      return row(label, start + i === cursor, BODY_PX)
+      return row(label, start + i === cursor, BODY_PX, withIcons)
     })
     const meta = oneLine(items[cursor]?.details?.[0] ?? '') || info.label
-    return this.box(info.icon, info.title, rows, [meta, 'swipe choose  ·  tap open  ·  2x back'], {
-      offset: start,
-      total: items.length,
-      visible: BODY_LINES,
-    }, `${cursor + 1}/${items.length}`)
+    const icons = page.map(item => item.icon ?? null)
+    return this.box(info.icon, info.title, rows, [meta, 'swipe choose  ·  tap open  ·  2x back'], `${cursor + 1}/${items.length}`, icons)
   }
 
   private detailRows(screen: Screen): string[] {
@@ -429,11 +429,7 @@ export class GlassesApp {
     const where = info.label
     const hasDiff = screen.kind === 'detail' && ((screen.payload as any)?.files?.length ?? 0) > 0
     const controls = [pages > 1 ? 'swipe page' : '', hasDiff ? 'tap diff' : '', '2x back'].filter(Boolean).join('  ·  ')
-    return this.box(screen.kind === 'diff' ? 'commit' : info.icon, screen.title, body, [where, controls], {
-      offset: page * BODY_LINES,
-      total: rows.length,
-      visible: BODY_LINES,
-    }, pages > 1 ? `${page + 1}/${pages}` : '')
+    return this.box(screen.kind === 'diff' ? 'commit' : (screen.icon ?? info.icon), screen.title, body, [where, controls], pages > 1 ? `${page + 1}/${pages}` : '')
   }
 
   // ---------- input ----------
@@ -485,6 +481,7 @@ export class GlassesApp {
         if (next === page) return
         screen.page = next
         screen.selectedIndex = 0
+        if (next === TREE_PAGE) this.prefetch(this.enabledModules[0].id)
       } else {
         const count = this.enabledModules.length
         const current = screen.selectedIndex ?? 0
@@ -494,6 +491,7 @@ export class GlassesApp {
           const next = Math.max(0, Math.min(count - 1, current + delta))
           if (next === current) return
           screen.selectedIndex = next
+          this.prefetch(this.enabledModules[next].id)
         }
       }
       await this.paint()
@@ -543,7 +541,7 @@ export class GlassesApp {
 
     if (screen.kind === 'itemList') {
       const item = screen.items?.[screen.selectedIndex ?? 0]
-      if (item && item.id !== 'error') await this.openItem(screen.module, item.id)
+      if (item && item.id !== 'error') await this.openItem(screen.module, item)
       return
     }
 
@@ -569,22 +567,34 @@ export class GlassesApp {
       title: moduleInfo(module).title,
       selectedIndex: 0,
     }
+    const cached = this.itemsCache.get(module)
+    if (cached) screen.items = cached
     if (fromMenu) this.stack.resetTo(screen)
     else this.stack.push(screen)
     void this.paint()
 
-    this.itemsCache.delete(module)
-    const items = await this.fetchItems(module)
+    const items = await this.fetchItems(module, true)
     this.itemsCache.set(module, items)
-    screen.items = items as ListItem[]
+    const selected = screen.items?.[screen.selectedIndex ?? 0]?.id
+    screen.items = items
+    const keep = items.findIndex(item => item.id === selected)
+    screen.selectedIndex = keep >= 0 ? keep : Math.min(screen.selectedIndex ?? 0, Math.max(0, items.length - 1))
     if (this.stack.current === screen) await this.paint()
+  }
+
+  private prefetch(module: ModuleId): void {
+    if (this.itemsCache.has(module) || this.prefetching.has(module)) return
+    this.prefetching.add(module)
+    void this.fetchItems(module, true)
+      .then(items => { if (!this.itemsCache.has(module)) this.itemsCache.set(module, items) })
+      .finally(() => this.prefetching.delete(module))
   }
 
   // Fetch list items for the selected module.
 
-  private async fetchItems(module: string): Promise<Array<{ id: string; primary: string; secondary?: string; details?: string[] }>> {
+  private async fetchItems(module: string, fresh = false): Promise<ListItem[]> {
     const cached = this.itemsCache.get(module)
-    if (cached) return cached as any
+    if (cached && !fresh) return cached
 
     try {
       switch (module) {
@@ -625,7 +635,7 @@ export class GlassesApp {
             id: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number}`,
             primary: p.title,
             secondary: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number}`,
-            scope: 'Open PRs',
+            icon: prIcon(p),
             details: [`${p.user?.login ?? 'someone'} opened · Updated ${relativeTime(p.updated_at ?? '')}`],
           }))
         }
@@ -638,23 +648,23 @@ export class GlassesApp {
           return (result.items ?? []).map(p => ({
             id: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number}`,
             primary: p.title,
-            secondary: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number} [${pullRequestState(p)}]`,
+            secondary: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number}`,
+            icon: prIcon(p),
             details: [`by ${p.user?.login ?? this.state.userLogin ?? ''} · Updated ${relativeTime(p.updated_at ?? '')}`],
           }))
         }
         case 'collabPrs': {
-          const repos = await this.client.collect<any>('/user/repos', { perPage: 10, maxPages: 2 })
-          const prs: any[] = []
-          for (const repo of repos.slice(0, 5)) {
-            try {
-              const r = await this.client.collect<any>(`/repos/${repo.full_name}/pulls?state=open`, { perPage: 10, maxPages: 1 })
-              prs.push(...r.map(p => ({ ...p, repo: repo.full_name })))
-            } catch {}
-          }
-          return prs.map(p => ({
+          const repos = await this.client.collect<any>('/user/repos?affiliation=owner&sort=updated', { perPage: 10, maxPages: 1 })
+          const lists = await Promise.all(repos.slice(0, 6).map(repo =>
+            this.client.collect<any>(`/repos/${this.repoPath(repo.full_name)}/pulls?state=open`, { perPage: 10, maxPages: 1 })
+              .then(r => r.map(p => ({ ...p, repo: repo.full_name })))
+              .catch(() => [] as any[]),
+          ))
+          return lists.flat().map(p => ({
             id: `${p.repo}#${p.number}`,
             primary: `#${p.number} ${p.title}`,
             secondary: `${p.repo} · ${p.user?.login ?? ''}`,
+            icon: prIcon(p),
           }))
         }
         case 'issues': {
@@ -697,13 +707,12 @@ export class GlassesApp {
         }
         case 'actions': {
           const repos = await this.client.collect<any>('/user/repos', { perPage: 5, maxPages: 1 })
-          const runs: any[] = []
-          for (const repo of repos.slice(0, 3)) {
-            try {
-              const r = await this.client.collect<any>(`/repos/${repo.full_name}/actions/runs`, { perPage: 10, maxPages: 1 })
-              runs.push(...r.map(x => ({ ...x, repo: repo.full_name })))
-            } catch {}
-          }
+          const lists = await Promise.all(repos.slice(0, 3).map(repo =>
+            this.client.get<{ workflow_runs?: any[] }>(`/repos/${this.repoPath(repo.full_name)}/actions/runs?per_page=10`)
+              .then(r => (r.workflow_runs ?? []).map(x => ({ ...x, repo: repo.full_name })))
+              .catch(() => [] as any[]),
+          ))
+          const runs = lists.flat()
           return runs.map(r => ({
             id: String(r.id),
             primary: r.name ?? 'Workflow',
@@ -721,7 +730,7 @@ export class GlassesApp {
     }
   }
 
-  private mapFeedItems(events: any[]): Array<{ id: string; primary: string; secondary?: string; details?: string[] }> {
+  private mapFeedItems(events: any[]): ListItem[] {
     return events.map(event => {
       const id = String(event.id ?? `${event.type}:${event.repo?.name}:${event.created_at}`)
       this.feedEvents.set(id, event)
@@ -737,7 +746,30 @@ export class GlassesApp {
 
   // Load details for the selected item.
 
-  private async openItem(module: string, itemId: string): Promise<void> {
+  private async openItem(module: string, item: ListItem): Promise<void> {
+    const itemId = item.id
+    const number = itemId.includes('#') ? itemId.split('#').pop() : ''
+    const placeholder: Screen = {
+      kind: 'detail',
+      module,
+      title: number && !item.primary.startsWith('#') ? `#${number} ${item.primary}` : item.primary,
+      icon: item.icon,
+      loading: true,
+      sections: [{ label: '', lines: ['Loading...'] }],
+      detailPage: 0,
+    }
+    this.stack.push(placeholder)
+    void this.paint()
+    const depth = this.stack.depth
+    await this.loadItem(module, itemId)
+    const opened = this.stack.depth > depth ? this.stack.pop() : null
+    if (this.stack.current !== placeholder) return
+    this.stack.pop()
+    if (opened) this.stack.push(opened)
+    await this.paint()
+  }
+
+  private async loadItem(module: string, itemId: string): Promise<void> {
     try {
       switch (module) {
         case 'myRepositories':
@@ -816,21 +848,25 @@ export class GlassesApp {
         sectionIndex: 0,
       })
     }
-    await this.paint()
   }
 
   private async openRepo(fullName: string): Promise<void> {
-    const repo = await this.client.get<any>(`/repos/${this.repoPath(fullName)}`).catch(() => null)
-    if (!repo) return
+    const path = this.repoPath(fullName)
     const prQuery = encodeURIComponent(`repo:${fullName} is:pr state:open archived:false`)
     const issueQuery = encodeURIComponent(`repo:${fullName} is:issue state:open archived:false`)
-    const [prSearch, issueSearch, releases, contributors, languages] = await Promise.all([
+    const none = [] as any[]
+    const [repo, prSearch, issueSearch, releases, contributors, languages, commits, issues, prs] = await Promise.all([
+      this.client.get<any>(`/repos/${path}`).catch(() => null),
       this.client.get<{ total_count?: number }>(`/search/issues?q=${prQuery}&per_page=1&page=1`, false).catch(() => ({ total_count: 0 })),
       this.client.get<{ total_count?: number }>(`/search/issues?q=${issueQuery}&per_page=1&page=1`, false).catch(() => ({ total_count: 0 })),
-      this.client.collect<any>(`/repos/${this.repoPath(fullName)}/releases`, { perPage: 100, maxPages: 1 }).catch(() => [] as any[]),
-      this.client.collect<any>(`/repos/${this.repoPath(fullName)}/contributors`, { perPage: 100, maxPages: 1 }).catch(() => [] as any[]),
-      this.client.get<Record<string, number>>(`/repos/${this.repoPath(fullName)}/languages`).catch(() => ({})),
+      this.client.collect<any>(`/repos/${path}/releases`, { perPage: 100, maxPages: 1 }).catch(() => none),
+      this.client.collect<any>(`/repos/${path}/contributors`, { perPage: 100, maxPages: 1 }).catch(() => none),
+      this.client.get<Record<string, number>>(`/repos/${path}/languages`).catch(() => ({} as Record<string, number>)),
+      this.client.collect<any>(`/repos/${path}/commits`, { perPage: 10, maxPages: 1 }).catch(() => none),
+      this.client.collect<any>(`/repos/${path}/issues`, { perPage: 10, maxPages: 1 }).catch(() => none),
+      this.client.collect<any>(`/repos/${path}/pulls`, { perPage: 10, maxPages: 1 }).catch(() => none),
     ])
+    if (!repo) return
     const overviewLines = [
       `${repo.full_name} [${repo.private ? 'private' : 'public'}]`,
       `PR: ${prSearch.total_count ?? 0} · STARS: ${repo.stargazers_count} · ISSUES: ${issueSearch.total_count ?? 0} · FORKS: ${repo.forks_count}`,
@@ -840,23 +876,14 @@ export class GlassesApp {
       `Branch: ${repo.default_branch}`,
       `Updated: ${repo.updated_at?.slice(0, 10)}`,
     ].filter(Boolean)
-    const sections = [
-      {
-        label: 'Overview',
-        lines: overviewLines,
-      },
-    ]
-    try {
-      const commits = await this.client.collect<any>(`/repos/${this.repoPath(fullName)}/commits`, { perPage: 10, maxPages: 1 })
-      const latest = commits[0]
-      if (latest) {
-        overviewLines.push(`Last commit: @${latest.author?.login ?? latest.commit?.author?.name ?? 'unknown'} [${latest.commit?.message?.split('\n')[0] ?? ''}] ${latest.sha?.slice(0, 7)} · ${relativeTime(latest.commit?.author?.date ?? latest.commit?.committer?.date ?? '')}`)
-      }
-      sections.push({
-        label: 'Commits',
-        lines: commits.map(c => `${c.sha?.slice(0, 7)} ${c.commit?.message?.split('\n')[0] ?? ''}`),
-      })
-    } catch {}
+    const latest = commits[0]
+    if (latest) {
+      overviewLines.push(`Last commit: @${latest.author?.login ?? latest.commit?.author?.name ?? 'unknown'} [${latest.commit?.message?.split('\n')[0] ?? ''}] ${latest.sha?.slice(0, 7)} · ${relativeTime(latest.commit?.author?.date ?? latest.commit?.committer?.date ?? '')}`)
+    }
+    const sections = [{ label: 'Overview', lines: overviewLines }]
+    if (commits.length) {
+      sections.push({ label: 'Commits', lines: commits.map(c => `${c.sha?.slice(0, 7)} ${c.commit?.message?.split('\n')[0] ?? ''}`) })
+    }
     const languageTotal = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0)
     if (languageTotal > 0) {
       sections.push({
@@ -866,20 +893,9 @@ export class GlassesApp {
           .map(([name, bytes]) => `${name}: ${(bytes / languageTotal * 100).toFixed(1)}%`),
       })
     }
-    try {
-      const issues = await this.client.collect<any>(`/repos/${this.repoPath(fullName)}/issues`, { perPage: 10, maxPages: 1 })
-      sections.push({
-        label: 'Issues',
-        lines: issues.filter(i => !i.pull_request).map(i => `#${i.number} ${i.title}`),
-      })
-    } catch {}
-    try {
-      const prs = await this.client.collect<any>(`/repos/${this.repoPath(fullName)}/pulls`, { perPage: 10, maxPages: 1 })
-      sections.push({
-        label: 'PRs',
-        lines: prs.map(p => `#${p.number} ${p.title}`),
-      })
-    } catch {}
+    const openIssues = issues.filter(i => !i.pull_request)
+    if (openIssues.length) sections.push({ label: 'Issues', lines: openIssues.map(i => `#${i.number} ${i.title}`) })
+    if (prs.length) sections.push({ label: 'PRs', lines: prs.map(p => `#${p.number} ${p.title}`) })
 
     this.stack.push({
       kind: 'detail',
@@ -928,63 +944,40 @@ export class GlassesApp {
   private async openPr(module: string, itemId: string): Promise<void> {
     const [repo, numStr] = itemId.split('#')
     const num = parseInt(numStr, 10)
-    const pr = await this.client.get<any>(`/repos/${this.repoPath(repo)}/pulls/${num}`).catch(() => null)
+    const base = `/repos/${this.repoPath(repo)}/pulls/${num}`
+    const none = [] as any[]
+    const [pr, comments, reviews, files, commits] = await Promise.all([
+      this.client.get<any>(base).catch(() => null),
+      this.client.collect<any>(`${base}/comments`, { perPage: 10, maxPages: 1 }).catch(() => none),
+      this.client.collect<any>(`${base}/reviews`, { perPage: 10, maxPages: 1 }).catch(() => none),
+      this.client.collect<any>(`${base}/files`, { perPage: 20, maxPages: 2 }).catch(() => none),
+      this.client.collect<any>(`${base}/commits`, { perPage: 10, maxPages: 1 }).catch(() => none),
+    ])
     if (!pr) return
 
+    const status = pr.merged_at ? 'merged' : pr.state
     const sections = [
       {
         label: 'Overview',
         lines: [
           `#${pr.number} ${pr.title}`,
-          `By ${pr.user?.login} · ${pr.state}${pr.draft ? ' · draft' : ''}`,
+          `By ${pr.user?.login} · ${status}${pr.draft ? ' · draft' : ''}`,
           `${pr.head?.ref} → ${pr.base?.ref}`,
           `+${pr.additions ?? 0} -${pr.deletions ?? 0} · ${pr.changed_files ?? 0} files`,
           pr.body ?? '',
         ].filter(Boolean),
       },
     ]
-    try {
-      const comments = await this.client.collect<any>(`/repos/${this.repoPath(repo)}/pulls/${num}/comments`, { perPage: 10, maxPages: 1 })
-      if (comments.length) {
-        sections.push({
-          label: 'Comments',
-          lines: comments.map(c => `${c.user?.login}: ${String(c.body ?? '')}`),
-        })
-      }
-    } catch {}
-    try {
-      const reviews = await this.client.collect<any>(`/repos/${this.repoPath(repo)}/pulls/${num}/reviews`, { perPage: 10, maxPages: 1 })
-      if (reviews.length) {
-        sections.push({
-          label: 'Reviews',
-          lines: reviews.map(r => `${r.user?.login}: ${r.state}`),
-        })
-      }
-    } catch {}
-    let files: any[] = []
-    try {
-      files = await this.client.collect<any>(`/repos/${this.repoPath(repo)}/pulls/${num}/files`, { perPage: 20, maxPages: 2 })
-      if (files.length) {
-        sections.push({
-          label: 'Files',
-          lines: files.map(f => `${f.status ?? ''} ${f.filename} (+${f.additions} -${f.deletions})`),
-        })
-      }
-    } catch {}
-    try {
-      const commits = await this.client.collect<any>(`/repos/${this.repoPath(repo)}/pulls/${num}/commits`, { perPage: 10, maxPages: 1 })
-      if (commits.length) {
-        sections.push({
-          label: 'Commits',
-          lines: commits.map(c => `${c.sha?.slice(0, 7)} ${c.commit?.message?.split('\n')[0] ?? ''}`),
-        })
-      }
-    } catch {}
+    if (comments.length) sections.push({ label: 'Comments', lines: comments.map(c => `${c.user?.login}: ${String(c.body ?? '')}`) })
+    if (reviews.length) sections.push({ label: 'Reviews', lines: reviews.map(r => `${r.user?.login}: ${r.state}`) })
+    if (files.length) sections.push({ label: 'Files', lines: files.map(f => `${f.status ?? ''} ${f.filename} (+${f.additions} -${f.deletions})`) })
+    if (commits.length) sections.push({ label: 'Commits', lines: commits.map(c => `${c.sha?.slice(0, 7)} ${c.commit?.message?.split('\n')[0] ?? ''}`) })
 
     this.stack.push({
       kind: 'detail',
       module,
       title: `#${pr.number} ${pr.title}`,
+      icon: prIcon(pr),
       sections,
       sectionIndex: 0,
       payload: { repo, number: num, files },
@@ -994,7 +987,11 @@ export class GlassesApp {
   private async openIssue(itemId: string): Promise<void> {
     const [repo, numStr] = itemId.split('#')
     const num = parseInt(numStr, 10)
-    const issue = await this.client.get<any>(`/repos/${this.repoPath(repo)}/issues/${num}`).catch(() => null)
+    const base = `/repos/${this.repoPath(repo)}/issues/${num}`
+    const [issue, comments] = await Promise.all([
+      this.client.get<any>(base).catch(() => null),
+      this.client.collect<any>(`${base}/comments`, { perPage: 10, maxPages: 1 }).catch(() => [] as any[]),
+    ])
     if (!issue) return
     const sections = [
       {
@@ -1006,15 +1003,7 @@ export class GlassesApp {
         ].filter(Boolean),
       },
     ]
-    try {
-      const comments = await this.client.collect<any>(`/repos/${this.repoPath(repo)}/issues/${num}/comments`, { perPage: 10, maxPages: 1 })
-      if (comments.length) {
-        sections.push({
-          label: 'Comments',
-          lines: comments.map(c => `${c.user?.login}: ${String(c.body ?? '')}`),
-        })
-      }
-    } catch {}
+    if (comments.length) sections.push({ label: 'Comments', lines: comments.map(c => `${c.user?.login}: ${String(c.body ?? '')}`) })
 
     this.stack.push({
       kind: 'detail',
@@ -1037,7 +1026,7 @@ export class GlassesApp {
       const items = screen.items!
       const known = new Set(items.map(item => item.id))
       const oldestLoadedEvent = this.feedEvents.get(items.at(-1)?.id ?? '')?.created_at ?? ''
-      let added: Array<{ id: string; primary: string; secondary?: string; details?: string[] }> = []
+      let added: ListItem[] = []
       while (this.feedHasMore && added.length === 0) {
         const pageNumber = this.feedPage + 1
         const page = await this.activity.forFeedPage(this.state.userLogin ?? '', pageNumber)

@@ -1,5 +1,5 @@
 import { createElement } from '../../dom'
-import { formatDate } from './shared'
+import { formatDate, prStatusIcon } from './shared'
 
 export interface CollabPrItem {
   repo: string
@@ -29,7 +29,7 @@ export function renderCollabPrs({ prs, onBack, onPr }: CollabPrsProps): HTMLElem
         <span class="collab-pr-repo">${p.repo}</span>
         <span class="collab-pr-number">#${p.number}</span>
       </div>
-      <div class="collab-pr-title">${p.title}</div>
+      <div class="collab-pr-title">${prStatusIcon('open')}${p.title}</div>
       <div class="collab-pr-meta">
         <span class="collab-pr-author">${p.author}</span>
         <span class="collab-pr-review">${p.reviewStatus}</span>

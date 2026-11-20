@@ -16,6 +16,7 @@ const prItems = [
   { number: 142, title: 'Draw HUD frames as image tiles', state: 'open', user: { login: 'kiko' }, repository_url: `/repos/${LOGIN}/g2git`, updated_at: new Date(Date.now() - 600e3).toISOString() },
   { number: 139, title: 'Gate swipes so one gesture moves one row', state: 'open', user: { login: 'rook' }, repository_url: `/repos/${LOGIN}/g2git`, updated_at: new Date(Date.now() - 7200e3).toISOString() },
   { number: 57, title: 'Add bevelled card component', state: 'closed', pull_request: { merged_at: '2026-11-01' }, user: { login: 'marrow' }, repository_url: `/repos/${LOGIN}/hud-kit`, updated_at: new Date(Date.now() - 86400e3).toISOString() },
+  { number: 49, title: 'Try a serif face for the HUD', state: 'closed', user: { login: 'rook' }, repository_url: `/repos/${LOGIN}/hud-kit`, updated_at: new Date(Date.now() - 2 * 86400e3).toISOString() },
   { number: 51, title: 'Quantize text to 16 grey levels', state: 'open', user: { login: 'lumen' }, repository_url: `/repos/${LOGIN}/hud-kit`, updated_at: new Date(Date.now() - 3 * 86400e3).toISOString() },
 ]
 

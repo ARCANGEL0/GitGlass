@@ -8,15 +8,16 @@
 import type { GitHubRuntime } from '../../even'
 import type { IconName } from './art'
 import { Pixels, TILES, loadHudFont, tileKey, tilePng } from './canvas'
+import { CURSOR_PX } from './text'
 import {
   drawBox,
   drawGraph,
   drawOverview,
   drawStateBar,
-  type BoxScroll,
   type GraphData,
   type OverviewData,
   type StateBarData,
+  TEXT_BOXES,
   type TextSlot,
 } from './pages'
 
@@ -27,7 +28,7 @@ export interface BoxView {
   count: string
   body: string
   hint: string
-  scroll?: BoxScroll
+  rowIcons?: Array<IconName | null>
 }
 
 export type HudView =
@@ -42,7 +43,7 @@ function draw(view: HudView): Pixels {
     case 'overview': drawOverview(p, view.data); break
     case 'stateBar': drawStateBar(p, view.data); break
     case 'graph': drawGraph(p, view.data); break
-    case 'box': drawBox(p, view.icon, view.title, view.scroll); break
+    case 'box': drawBox(p, view.icon, view.title, view.rowIcons, TEXT_BOXES.body.x + Math.round(CURSOR_PX) + 1); break
   }
   p.quantize()
   return p
@@ -100,20 +101,20 @@ export class Hud {
     const pixels = draw(view)
     const texts = textsFor(view)
 
-    // Leaving a box: clear its text first so it does not hang over the new art.
-    if (view.kind !== 'box') {
-      await Promise.all(SLOTS.map(slot => this.runtime.setText(slot, ' ')))
-    }
-
-    for (const tile of TILES) {
-      const key = tileKey(pixels, tile)
-      if (this.sent.get(tile.id) === key) continue
-      // A newer view is waiting: skip the rest of this one.
-      if (this.next) return
-      await this.runtime.sendTile(tile, await tilePng(pixels, tile))
-      this.sent.set(tile.id, key)
-    }
-
     await Promise.all(SLOTS.map(slot => this.runtime.setText(slot, texts[slot])))
+
+    const changed = TILES
+      .map(tile => ({ tile, key: tileKey(pixels, tile) }))
+      .filter(({ tile, key }) => this.sent.get(tile.id) !== key)
+    const encoded = await Promise.all(changed.map(({ tile }) => tilePng(pixels, tile)))
+    for (let i = 0; i < changed.length; i++) {
+      if (this.next) return
+      await this.runtime.sendTile(changed[i].tile, encoded[i])
+      this.sent.set(changed[i].tile.id, changed[i].key)
+    }
+
+    if (changed.length) {
+      await Promise.all(SLOTS.filter(slot => texts[slot].trim()).map(slot => this.runtime.setText(slot, texts[slot], true)))
+    }
   }
 }

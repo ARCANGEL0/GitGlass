@@ -1,5 +1,5 @@
 import { createElement } from '../../dom'
-import { formatDate } from './shared'
+import { formatDate, prStatusIcon } from './shared'
 
 export interface PullRequestItem {
   repo: string
@@ -27,7 +27,7 @@ export function renderPullRequests({ prs, onBack, onPr }: PullRequestsProps): HT
         <span class="pr-repo">${p.repo}</span>
         <span class="pr-number">#${p.number}</span>
       </div>
-      <div class="pr-title">${p.title}</div>
+      <div class="pr-title">${prStatusIcon(p.state)}${p.title}</div>
       <div class="pr-meta">
         <span class="pr-author">${p.author}</span>
         <span class="pr-state">${p.state}${p.draft ? ' · draft' : ''}</span>

@@ -261,7 +261,7 @@ export function drawGraph(p: Pixels, d: GraphData): void {
     const iconWidth = icon(p, row.icon, 56, c - 6, tone)
     const pillRoom = row.value ? Math.max(30, p.textWidth(row.value, 20) + 20) + 16 : 0
     p.text(p.fit(row.label, 20, RIGHT - 70 - iconWidth - pillRoom), 56 + iconWidth + 12, c - 11, 20, tone)
-    if (row.value) pill(p, row.value, RIGHT - 8, c, active)
+    if (row.value) pill(p, row.value, RIGHT - 8, c, false)
   })
 
   footer(p, d.footer)
@@ -303,14 +303,7 @@ export const TEXT_BOXES: Record<TextSlot, TextBox> = {
   hint: { id: 8, name: 'hint', x: 14, y: BOX.y1 + 6, width: 552, height: LINE_H * HINT_LINES + 2, color: 2 },
 }
 
-export interface BoxScroll {
-  /** First visible row and how many rows there are in all. */
-  offset: number
-  total: number
-  visible: number
-}
-
-export function drawBox(p: Pixels, name: IconName, title: string, scroll?: BoxScroll): void {
+export function drawBox(p: Pixels, name: IconName, title: string, rowIcons: Array<IconName | null> = [], iconX = 40): void {
   const { x0, x1, y1 } = BOX
 
   // Header icon, left of the title text container.
@@ -319,7 +312,7 @@ export function drawBox(p: Pixels, name: IconName, title: string, scroll?: BoxSc
     const rows = ICONS[name]
     p.bitmap(rows, 14, 20 - Math.ceil(rows.length / 2), BRIGHT)
   }
-  p.text(p.fit(title, TITLE_PX, STEP_X - 52), 40, 9, TITLE_PX)
+  p.text(p.fit(title, TITLE_PX, SCREEN_W / 2 - 46), 40, 9, TITLE_PX)
 
   // Rule: low under the title, stepping up under the counter. A commit sits on the step.
   p.path([[x0, BOX_RULE_Y], [STEP_X, BOX_RULE_Y], [STEP_X + 8, STEP_Y], [x1, STEP_Y]], BRIGHT, 2)
@@ -330,16 +323,13 @@ export function drawBox(p: Pixels, name: IconName, title: string, scroll?: BoxSc
   const bottom = y1 - 10
   p.path([[18, top], [10, top], [10, bottom], [18, bottom]], BRIGHT, 2)
 
-  // Scroll track down the right edge when the content runs past one screen.
-  const trackX = x1 - 8
-  if (scroll && scroll.total > scroll.visible) {
-    const span = bottom - top
-    const thumb = Math.max(14, Math.round((scroll.visible / scroll.total) * span))
-    const maxOffset = Math.max(1, scroll.total - scroll.visible)
-    const thumbTop = top + Math.round((Math.min(scroll.offset, maxOffset) / maxOffset) * (span - thumb))
-    p.line(trackX, top, trackX, bottom, DIM, 1)
-    p.rect(trackX - 1, thumbTop, 4, thumb, BRIGHT)
-  }
+  rowIcons.slice(0, BODY_LINES).forEach((rowIcon, i) => {
+    if (!rowIcon) return
+    const rows = ICONS[rowIcon as Exclude<IconName, 'github'>]
+    if (!rows) return
+    const centre = TEXT_BOXES.body.y + i * LINE_H + 15
+    p.bitmap(rows, iconX, centre - Math.ceil(rows.length / 2), BRIGHT)
+  })
 
   // Closing rule above the hint lines.
   p.line(x0, y1, x1, y1, MID, 1)

@@ -1,5 +1,5 @@
 import { createElement } from '../../dom'
-import { formatDate } from './shared'
+import { formatDate, prStatusIcon } from './shared'
 
 export interface ContributionItem {
   repo: string
@@ -22,7 +22,7 @@ export function renderContribution({ items, onBack, onItem }: ContributionProps)
   const rows = items.map((item, index) => `
     <button class="pr-row" type="button" data-index="${index}">
       <span class="pr-header"><span class="pr-repo">${item.repo}</span><span class="pr-number">#${item.number}</span></span>
-      <span class="pr-title">${item.title}</span>
+      <span class="pr-title">${prStatusIcon(item.state)}${item.title}</span>
       <span class="pr-meta"><span class="pr-author">${item.author}</span><span class="pr-state">${item.state}</span></span>
       <span class="pr-time">Updated ${formatDate(item.updatedAt)}</span>
     </button>

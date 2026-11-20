@@ -44,7 +44,7 @@ export interface MenuEntry {
 }
 
 export interface GitHubRuntime {
-  setText: (slot: TextSlot, content: string) => Promise<void>
+  setText: (slot: TextSlot, content: string, force?: boolean) => Promise<void>
   sendTile: (tile: Tile, png: number[]) => Promise<void>
   onTap: (handler: (source: InputSource) => void) => void
   onSwipe: (handler: (dir: SwipeDirection, source: InputSource) => void) => void
@@ -218,9 +218,9 @@ export async function connectGitHubRuntime(args: { config: AppConfig; menu?: rea
   })
 
   return {
-    setText(slot, content) {
+    setText(slot, content, force = false) {
       const next = (content || ' ').slice(0, 1900)
-      if (shownText[slot] === next) return Promise.resolve()
+      if (!force && shownText[slot] === next) return Promise.resolve()
       const box = TEXT_BOXES[slot]
       return enqueue(`text ${slot}`, async () => {
         await bridge.textContainerUpgrade(
@@ -241,8 +241,6 @@ export async function connectGitHubRuntime(args: { config: AppConfig; menu?: rea
           new ImageRawDataUpdate({ containerID: tile.id, containerName: tile.name, imageData: png }),
         )
         if (String(result) !== 'success') throw new Error(`tile ${tile.name}: ${String(result)}`)
-        // The simulator drops upgraded text after image sends, so text is resent after tiles.
-        shownText.count = shownText.body = shownText.hint = ''
       })
     },
     onTap(handler) { tapHandler = handler },

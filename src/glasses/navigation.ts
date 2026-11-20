@@ -7,6 +7,8 @@
 //
 // Swipe moves within a screen, tap goes deeper, double tap goes back.
 
+import type { IconName } from './hud/art'
+
 export type ScreenKind = 'dashboard' | 'itemList' | 'detail' | 'diff'
 
 export interface ListItem {
@@ -14,12 +16,15 @@ export interface ListItem {
   primary: string
   secondary?: string
   details?: string[]
+  icon?: IconName
 }
 
 export interface Screen {
   kind: ScreenKind
   module: string
   title: string
+  icon?: IconName
+  loading?: boolean
   /** dashboard: which of the three pages is showing */
   page?: number
   /** dashboard tree and item lists: selected row */
@@ -59,6 +64,10 @@ export class NavStack {
 
   replace(screen: Screen): void {
     this.screens = [screen]
+  }
+
+  get depth(): number {
+    return this.screens.length
   }
 
   isRoot(): boolean {

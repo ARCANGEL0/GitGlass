@@ -553,7 +553,7 @@ export class PhoneApp {
       repo: p.repository_url?.split('/repos/')[1] ?? 'unknown',
       number: p.number,
       title: p.title,
-      state: p.state as 'open' | 'closed' | 'merged',
+      state: p.pull_request?.merged_at ? 'merged' : p.state as 'open' | 'closed',
       draft: p.draft,
       author: p.user?.login ?? this.state.userLogin ?? '',
       reviewStatus: 'none' as const,

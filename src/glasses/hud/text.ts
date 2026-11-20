@@ -49,8 +49,16 @@ const INDENT = (() => {
 })()
 
 /** One list row: cursor or indent, then the label cut to fit. */
-export function row(label: string, selected: boolean, maxPx: number): string {
-  const prefix = selected ? CURSOR : INDENT
+export const CURSOR_PX = getTextWidth(CURSOR)
+
+const ICON_GAP = (() => {
+  let pad = ''
+  while (getTextWidth(pad) < 22) pad += ' '
+  return pad
+})()
+
+export function row(label: string, selected: boolean, maxPx: number, withIcon = false): string {
+  const prefix = (selected ? CURSOR : INDENT) + (withIcon ? ICON_GAP : '')
   return prefix + truncate(label, maxPx - getTextWidth(prefix) - 4)
 }
 
