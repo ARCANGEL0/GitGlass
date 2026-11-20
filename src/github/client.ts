@@ -23,7 +23,7 @@ export class GitHubApiError extends Error {
 export interface RateLimit {
   limit: number
   remaining: number
-  reset: number // epoch milliseconds
+  reset: number // Unix timestamp in milliseconds
 }
 
 export interface PagedResult<T> {
@@ -138,6 +138,17 @@ export class GitHubClient {
     }
   }
 
+  /** GraphQL query against the same API origin. Not cached. */
+  async graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+    const result = await this.fetchJson<{ data?: T; errors?: Array<{ message?: string }> }>('/graphql', {
+      method: 'POST',
+      body: JSON.stringify({ query, variables }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (!result.data) throw new GitHubApiError(result.errors?.[0]?.message ?? 'GraphQL query failed', 0, false)
+    return result.data
+  }
+
   async get<T>(path: string, useCache = true): Promise<T> {
     const now = Date.now()
     if (useCache) {
@@ -151,7 +162,7 @@ export class GitHubClient {
     return data
   }
 
-  /** Fetch one page of results. Returns items and whether a next page exists. */
+  /** Fetch one page and return the next page number, if present. */
   async fetchPage<T>(
     path: string,
     page: number,
@@ -200,8 +211,7 @@ export class GitHubClient {
     }
   }
 
-  /** Collect up to maxPages of a list endpoint. Bounded so a single gesture
-   *  never triggers unbounded requests. */
+  /** Fetch at most maxPages pages from a list endpoint. */
   async collect<T>(
     path: string,
     opts: { perPage?: number; maxPages?: number } = {},
