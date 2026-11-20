@@ -1,4 +1,3 @@
-// GitHub API resource shapes (picked fields)
 
 export interface GitHubUser {
   login: string
@@ -80,7 +79,6 @@ export interface GitHubWorkflowRun {
   html_url: string
 }
 
-// Persisted application state (shared phone + glasses)
 
 export interface ModulePrefs {
   feed: boolean
@@ -140,7 +138,6 @@ export const EMPTY_STATE: AppState = {
   configVersion: 1,
 }
 
-// Glasses navigation
 
 export type ModuleId =
   | 'feed'
@@ -174,14 +171,12 @@ export const MODULE_ORDER: NavEntry[] = [
   { module: 'profile', label: 'Profile' },
 ]
 
-// Screen renderer result
 
 export interface Screen {
   left: string
   right: string
 }
 
-// Glasses data shapes
 
 export interface GlassesRepo {
   full_name: string

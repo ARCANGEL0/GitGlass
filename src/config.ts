@@ -5,20 +5,17 @@ export interface AppConfig {
   packageId: string
   version: string
 
-  // GitHub API
   apiBase: string
   scopes: string[]
   cacheTtlMs: number
   timeoutMs: number
   maxPagesPerRequest: number
 
-  // Polling
   feedPollMs: number
   notificationsPollMs: number
   prPollMs: number
   idleThresholdMs: number
 
-  // Glasses display
   leftWidth: number
   rightWidth: number
   borderColor: number
@@ -28,7 +25,6 @@ export interface AppConfig {
   dimText: number
   normalText: number
 
-  // Timing
   clockTickMs: number
 
   modules: ModulePrefs

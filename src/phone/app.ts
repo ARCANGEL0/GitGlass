@@ -163,8 +163,7 @@ export class PhoneApp {
       this.view = 'dashboard'
     }
     this.store.subscribe(state => {
-      // A token loaded from native storage must be restored on the API client
-      // before the dashboard starts fetching profile and module data.
+      // Restore the token before rendering starts API requests.
       this.client.setToken(state.token)
       if (state.token && state.userLogin && this.view === 'landing') {
         this.view = 'dashboard'
@@ -434,7 +433,7 @@ export class PhoneApp {
     this.navigate('landing')
   }
 
-  // ── Feed ─────────────────────────────────────────────────────────────
+  // Fetch feed activity and repository suggestions.
 
   private async fetchFeed(): Promise<{ entries: FeedEntry[]; trending: FeedRepo[]; popular: FeedRepo[] }> {
     const login = this.state.userLogin
@@ -499,7 +498,7 @@ export class PhoneApp {
     }
   }
 
-  // ── Profile ──────────────────────────────────────────────────────────
+  // Load the current user's profile.
 
   private async fetchProfile(): Promise<ProfileUser | null> {
     const user = await this.users.getProfile().catch(() => null)
@@ -514,7 +513,7 @@ export class PhoneApp {
     }
   }
 
-  // ── My Repositories ──────────────────────────────────────────────────
+  // Load repositories owned by the current user.
 
   private async fetchMyRepos(): Promise<RepoItem[]> {
     const [repos, prs] = await Promise.all([
@@ -546,7 +545,7 @@ export class PhoneApp {
     }))
   }
 
-  // ── Pull Requests ────────────────────────────────────────────────────
+  // Load pull requests from the user's repositories.
 
   private async fetchPullRequests(): Promise<PullRequestItem[]> {
     const prs = await this.pulls.onMyRepositories(this.state.userLogin ?? '').catch(() => [] as any[])
@@ -562,7 +561,7 @@ export class PhoneApp {
     }))
   }
 
-  // ── Notifications ────────────────────────────────────────────────────
+  // Load notifications for the current user.
 
   private async fetchNotifications(): Promise<NotificationItem[]> {
     const notifs = await this.notifications.list().catch(() => [] as any[])
@@ -576,7 +575,7 @@ export class PhoneApp {
     }))
   }
 
-  // ── Issues ───────────────────────────────────────────────────────────
+  // Load issues from the user's repositories.
 
   private async fetchIssues(): Promise<IssueItem[]> {
     const issues = await this.issues.listForMyRepositories(this.state.userLogin ?? '').catch(() => [] as any[])
@@ -605,7 +604,7 @@ export class PhoneApp {
     }))
   }
 
-  // ── Collab PRs ───────────────────────────────────────────────────────
+  // Load open pull requests from other users on owned repositories.
 
   private async fetchCollabPrs(): Promise<CollabPrItem[]> {
     const repos = await this.repos.list({ perPage: 10, maxPages: 2 }).catch(() => [] as any[])
@@ -630,7 +629,7 @@ export class PhoneApp {
       }))
   }
 
-  // ── Explore ──────────────────────────────────────────────────────────
+  // Load repositories for the Explore view.
 
   private async fetchExplore(): Promise<RepoOverview[]> {
     const repos = await this.repos.list().catch(() => [] as any[])
@@ -646,7 +645,7 @@ export class PhoneApp {
     }))
   }
 
-  // ── Code Search ──────────────────────────────────────────────────────
+  // Search repositories for the Code Search view.
 
   private async fetchCodeSearch(): Promise<SearchResultItem[]> {
     const results = await this.search.repositories('typescript').catch(() => [] as any[])
@@ -660,7 +659,7 @@ export class PhoneApp {
     }))
   }
 
-  // ── Actions ──────────────────────────────────────────────────────────
+  // Load workflow runs from the user's repositories.
 
   private async fetchActions(): Promise<WorkflowRunItem[]> {
     const repos = await this.repos.list().catch(() => [] as any[])
@@ -678,7 +677,7 @@ export class PhoneApp {
           createdAt: r.created_at,
         })))
       } catch {
-        // Skip repos we can't read
+        // Skip this repository if its request fails.
       }
     }
     return runs

@@ -1,14 +1,5 @@
-/* Application state store shared between the phone companion and the glasses.
-
-State is persisted to the Even companion app's native key/value storage
-(bridge.setLocalStorage / getLocalStorage), which survives WebView-kill
-cycles more reliably than browser localStorage on iOS. Browser localStorage
-is kept as a fallback for the dev-server preview where there is no bridge.
-
-The store is a tiny pub/sub: subscribers are notified whenever state changes
-so the phone UI and glasses renderer can re-render from a single source of
-truth.
-*/
+/* Native storage preserves state across app restarts. Browser localStorage is
+ * the preview fallback. The phone and glasses subscribe to this store. */
 
 import { AppState, EMPTY_STATE, DEFAULT_MODULES, DEFAULT_DISPLAY } from '../types'
 import { DEFAULT_CONFIG, type AppConfig } from '../config'
@@ -41,8 +32,7 @@ export class StateStore {
         : null
   }
 
-  /** Call once the Even bridge is available. Persistence switches to the
-   *  companion-app native storage; any pending local-only changes are flushed. */
+  /** Attach native storage after the Even bridge is ready. */
   async attachBridge(
     getItem: (key: string) => Promise<string>,
     setItem: (key: string, value: string) => Promise<boolean>,
@@ -52,8 +42,7 @@ export class StateStore {
     const revision = this.stateRevision
     const loaded = await this.load(revision)
 
-    // This also migrates a browser-preview value into native storage. If the
-    // user changed state while the bridge was loading, that newer state wins.
+    // Preserve updates made while native storage is loading.
     await this.persist()
     if (loaded) this.notify()
     return loaded
@@ -67,14 +56,13 @@ export class StateStore {
     return this.config
   }
 
-  /** Replace the whole config (e.g. after the user edits settings). */
   setConfig(config: AppConfig): void {
     this.config = config
     void this.persist()
     this.notify()
   }
 
-  /** Partially update state, persist, and notify subscribers. */
+  /** Apply a state update, persist it, and notify subscribers. */
   async set(patch: Partial<AppState>): Promise<void> {
     this.state = { ...this.state, ...patch, configVersion: CONFIG_VERSION }
     this.stateRevision += 1
@@ -102,7 +90,7 @@ export class StateStore {
       try {
         fn(this.state)
       } catch {
-        // A subscriber must not break the store.
+        // Continue notifying subscribers if one throws.
       }
     }
   }
@@ -118,14 +106,14 @@ export class StateStore {
             return
           }
         } catch {
-          // Fall through to browser storage when native storage is unavailable.
+          // Fall back to browser storage if the native write fails.
         }
       }
 
       try {
         this.storage?.setItem(FALLBACK_KEY, value)
       } catch {
-        // Some WebViews expose localStorage but reject writes in private mode.
+        // Ignore localStorage write failures, including private-mode errors.
       }
     }
 
@@ -133,7 +121,7 @@ export class StateStore {
     return this.persistQueue
   }
 
-  /** Load persisted state. Returns true if something was loaded. */
+  /** Load persisted state. Returns true when the saved state is valid. */
   async load(expectedRevision?: number): Promise<boolean> {
     let raw: string | null = null
     if (this.bridge) {
@@ -175,7 +163,7 @@ export class StateStore {
     }
   }
 
-  /** Whether state has been persisted to native (bridge) storage at least once. */
+  /** True after state has been read from or written to native storage. */
   isPersisted(): boolean {
     return this.persisted
   }

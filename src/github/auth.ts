@@ -12,8 +12,7 @@ export interface AuthResult {
 export class GitHubAuth {
   constructor(private client: GitHubClient) {}
 
-  /** Validate the token and load the profile + accessible repositories.
-   *  Returns a structured result; callers decide how to render errors. */
+  /** Validate the token and load the user's profile and repositories. */
   async validate(token: string): Promise<AuthResult> {
     this.client.setToken(token)
 
