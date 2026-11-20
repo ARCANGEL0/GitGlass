@@ -79,15 +79,11 @@ VITE_HUD_DEMO=1 npm run dev         # sample data, no token needed
 
 The sample-data client only loads in dev builds and never ships.
 
-Package and upload:
+Production build:
 
 ```bash
-npm run build
-npm run pack                        # github-g2.ehpk, stamped with the installed SDK version
-evenhub upload github-g2.ehpk -m "what changed"
+npm run build                       # output in dist/
 ```
-
-Bump `version` in both `package.json` and `app.json` before each upload.
 
 ## Layout
 
