@@ -1,32 +1,34 @@
-/* Glasses navigation — a screen stack for the G2 HUD.
+// Screen stack for the glasses.
+//
+//   dashboard  root. Three pages: overview, pull request gauge, module tree.
+//   itemList   one module's items (pull requests, issues, repos...).
+//   detail     one item, paged six lines at a time.
+//   diff       a changed file's patch, paged the same way.
+//
+// Swipe moves within a screen, tap goes deeper, double tap goes back.
 
-Screens:
-  moduleList  — legacy root used only before authentication. Categories are
-                selected from the G2 app menu, never shown in the content frame.
-  itemList    — items within a module (PRs, issues, repos, etc.). Swipe up/down
-                to move the selection, tap to open the item detail.
-  detail      — an item's detail with paged sections. Swipe up/down to move
-                between sections, tap to enter a section (e.g. diff viewer).
-  diff        — line-by-line diff browser. Swipe up/down to scroll lines.
+export type ScreenKind = 'dashboard' | 'itemList' | 'detail' | 'diff'
 
-Gestures:
-  swipe up/down  — previous / next
-  single tap     — enter / select
-  double tap     — back (or exit from root)
-  long press     — contextual menu (switch module)
-*/
-
-export type ScreenKind = 'moduleList' | 'itemList' | 'detail' | 'diff'
+export interface ListItem {
+  id: string
+  primary: string
+  secondary?: string
+  details?: string[]
+}
 
 export interface Screen {
   kind: ScreenKind
   module: string
   title: string
-  items?: Array<{ id: string; primary: string; secondary?: string; details?: string[] }>
+  /** dashboard: which of the three pages is showing */
+  page?: number
+  /** dashboard tree and item lists: selected row */
   selectedIndex?: number
+  items?: ListItem[]
   sections?: Array<{ label: string; lines: string[] }>
   sectionIndex?: number
-  detailOffset?: number
+  /** detail and diff: which page of wrapped lines */
+  detailPage?: number
   payload?: unknown
 }
 
@@ -37,20 +39,26 @@ export class NavStack {
     return this.screens[this.screens.length - 1] ?? null
   }
 
+  get root(): Screen | null {
+    return this.screens[0] ?? null
+  }
+
   push(screen: Screen): void {
     this.screens.push(screen)
   }
 
   pop(): Screen | null {
-    return this.screens.pop() ?? null
+    return this.screens.length > 1 ? this.screens.pop() ?? null : null
+  }
+
+  /** Keep the root and put one screen on top of it. */
+  resetTo(screen: Screen): void {
+    this.screens = this.screens.slice(0, 1)
+    this.screens.push(screen)
   }
 
   replace(screen: Screen): void {
     this.screens = [screen]
-  }
-
-  get depth(): number {
-    return this.screens.length
   }
 
   isRoot(): boolean {

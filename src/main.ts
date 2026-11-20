@@ -2,16 +2,27 @@ import { StateStore } from './state/store'
 import { GitHubClient } from './github/client'
 import { PhoneApp } from './phone/app'
 import { connectGitHubRuntime } from './even'
-import { GlassesApp } from './glasses/app'
+import { GLASSES_MENU, GlassesApp } from './glasses/app'
 import { makeConfig } from './config'
 import { EMPTY_STATE } from './types'
 import './phone/style.css'
 
 const config = makeConfig()
 const store = new StateStore({ ...EMPTY_STATE, configVersion: 1 }, config)
-const client = new GitHubClient(null, config.cacheTtlMs)
+
+/** In dev with VITE_HUD_DEMO=1 the HUD runs on fixtures, so it can be checked without a token. */
+const demoMode = import.meta.env.DEV && import.meta.env.VITE_HUD_DEMO === '1'
+
+async function makeClient(): Promise<GitHubClient> {
+  if (demoMode) {
+    const { DemoClient } = await import('./dev/demo-client')
+    return new DemoClient()
+  }
+  return new GitHubClient(null, config.cacheTtlMs)
+}
 
 async function main(): Promise<void> {
+  const client = await makeClient()
   const viteEnv = (import.meta as ImportMeta & {
     env?: { DEV?: boolean; VITE_DEMO_TOKEN?: string }
   }).env
@@ -21,36 +32,7 @@ async function main(): Promise<void> {
   const phone = new PhoneApp(root, store, client)
   void phone.start()
 
-  const modules = store.getConfig().modules
-  const menu: { id: number; label: string }[] = []
-  let id = 1
-  for (const [module, enabled] of Object.entries(modules)) {
-    if (enabled) {
-      const labels: Record<string, string> = {
-        feed: 'Feed',
-        pullRequests: 'Pull Requests',
-        notifications: 'Notifications',
-        issues: 'Issues',
-        collabPrs: 'Collab PRs',
-        explore: 'Explore',
-        myRepositories: 'My Repos',
-        contribution: 'Contribution',
-        codeSearch: 'Code Search',
-        actions: 'Actions',
-        profile: 'Profile',
-      }
-      menu.push({ id, label: labels[module] ?? module })
-      id += 1
-    }
-  }
-
-  const runtime = await connectGitHubRuntime({
-    config,
-    menu,
-    initialLeft: '',
-    initialRight: welcomeScreenRight(config),
-  })
-
+  const runtime = await connectGitHubRuntime({ config, menu: GLASSES_MENU })
   if (!runtime) return
 
   const glasses = new GlassesApp(runtime, store.get(), config, client)
@@ -60,7 +42,10 @@ async function main(): Promise<void> {
     (key, value) => runtime.setStorage(key, value),
   )
 
-  if (demoToken) {
+  if (demoMode) {
+    const { DEMO_LOGIN } = await import('./dev/demo-client')
+    await store.set({ token: 'demo', userLogin: DEMO_LOGIN, syncedAt: Date.now() })
+  } else if (demoToken) {
     client.setToken(demoToken)
     let userLogin: string | null = null
     try {
@@ -80,23 +65,7 @@ async function main(): Promise<void> {
   }
 
   glasses.bind()
-
-  runtime.onForeground(() => {
-    glasses.refresh()
-  })
-
   glasses.start()
-}
-
-function welcomeScreenRight(config: ReturnType<typeof makeConfig>): string {
-  const lines = [
-    config.welcomeTitle,
-    '',
-    'NOT CONNECTED',
-    '',
-    ...config.welcomeBody,
-  ]
-  return lines.join('\n')
 }
 
 void main()
