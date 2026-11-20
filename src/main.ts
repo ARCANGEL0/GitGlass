@@ -43,8 +43,8 @@ async function main(): Promise<void> {
   )
 
   if (demoMode) {
-    const { DEMO_LOGIN } = await import('./dev/demo-client')
-    await store.set({ token: 'demo', userLogin: DEMO_LOGIN, syncedAt: Date.now() })
+    const { DEMO_LOGIN, DEMO_MODULES } = await import('./dev/demo-client')
+    await store.set({ token: 'demo', userLogin: DEMO_LOGIN, modules: DEMO_MODULES, syncedAt: Date.now() })
   } else if (demoToken) {
     client.setToken(demoToken)
     let userLogin: string | null = null

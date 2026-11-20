@@ -3,6 +3,7 @@
 // dynamically behind import.meta.env.DEV, so it never reaches a build.
 
 import { GitHubClient } from '../github/client'
+import { DEFAULT_MODULES, type ModulePrefs } from '../types'
 
 const LOGIN = 'octo-dev'
 
@@ -56,7 +57,15 @@ export class DemoClient extends GitHubClient {
   async get<T>(path: string): Promise<T> {
     await new Promise(resolve => setTimeout(resolve, 150))
     if (path === '/user') {
-      return { login: LOGIN, name: 'Octo Dev', public_repos: 48, total_private_repos: 9, followers: 2548, following: 31, bio: 'Building HUDs.' } as T
+      return { login: LOGIN, name: 'Octo Dev', public_repos: 48, total_private_repos: 9, followers: 2548, following: 31, bio: 'Building HUDs.', company: 'Octo Labs', location: 'Lisbon', blog: 'octo.dev', created_at: '2014-03-02T00:00:00Z', public_gists: 12 } as T
+    }
+    if (path === '/user/orgs') return [{ login: 'even-hud' }, { login: 'octo-labs' }] as T
+    if (path.startsWith('/users/') && path.includes('/events')) {
+      return [
+        { type: 'PushEvent', repo: { name: `${LOGIN}/g2git` }, created_at: new Date(Date.now() - 900e3).toISOString() },
+        { type: 'PullRequestEvent', repo: { name: `${LOGIN}/hud-kit` }, created_at: new Date(Date.now() - 7200e3).toISOString() },
+        { type: 'IssueCommentEvent', repo: { name: 'nova/tiny-llm' }, created_at: new Date(Date.now() - 86400e3).toISOString() },
+      ] as T
     }
     if (path.startsWith('/notifications')) {
       return [
@@ -64,6 +73,13 @@ export class DemoClient extends GitHubClient {
         { id: '2', unread: true, reason: 'mention', subject: { title: 'Gauge arc clips at 100%', type: 'Issue' }, repository: { full_name: `${LOGIN}/hud-kit` } },
         { id: '3', unread: true, reason: 'author', subject: { title: 'Release v1.4.0', type: 'Release' }, repository: { full_name: `${LOGIN}/hud-kit` } },
       ] as T
+    }
+    if (path.startsWith('/search/repositories')) {
+      return { total_count: 3, items: [
+        { name: 'tiny-llm', full_name: 'nova/tiny-llm', description: 'A 40 MB language model that runs in a browser tab.', language: 'Rust', stargazers_count: 8412, forks_count: 301, open_issues_count: 22, created_at: new Date(Date.now() - 4 * 86400e3).toISOString(), updated_at: new Date().toISOString(), owner: { login: 'nova' } },
+        { name: 'hud-fonts', full_name: 'lumen/hud-fonts', description: 'Pixel fonts tuned for 576 px wide displays.', language: 'Python', stargazers_count: 2190, forks_count: 44, open_issues_count: 3, created_at: new Date(Date.now() - 2 * 86400e3).toISOString(), updated_at: new Date().toISOString(), owner: { login: 'lumen' } },
+        { name: 'diffwalk', full_name: 'rook/diffwalk', description: 'Read pull request diffs one hunk at a time.', language: 'Go', stargazers_count: 977, forks_count: 12, open_issues_count: 1, created_at: new Date(Date.now() - 6 * 86400e3).toISOString(), updated_at: new Date().toISOString(), owner: { login: 'rook' } },
+      ] } as T
     }
     if (path.startsWith('/search/issues')) {
       const query = decodeURIComponent(path.split('q=')[1]?.split('&')[0] ?? '')
@@ -94,3 +110,5 @@ export class DemoClient extends GitHubClient {
 }
 
 export const DEMO_LOGIN = LOGIN
+
+export const DEMO_MODULES = Object.fromEntries(Object.keys(DEFAULT_MODULES).map(key => [key, true])) as unknown as ModulePrefs

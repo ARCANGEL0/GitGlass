@@ -632,16 +632,16 @@ export class PhoneApp {
   // Load repositories for the Explore view.
 
   private async fetchExplore(): Promise<RepoOverview[]> {
-    const repos = await this.repos.list().catch(() => [] as any[])
+    const repos = await this.search.trending().catch(() => [] as any[])
     return repos.map(r => ({
       name: r.name,
-      owner: r.owner.login,
+      owner: r.owner?.login ?? r.full_name?.split('/')[0] ?? '',
       description: r.description,
       language: r.language,
-      stars: r.stargazers_count,
-      forks: r.forks_count,
-      issues: r.open_issues_count,
-      updatedAt: r.updated_at,
+      stars: r.stargazers_count ?? 0,
+      forks: r.forks_count ?? 0,
+      issues: r.open_issues_count ?? 0,
+      updatedAt: r.updated_at ?? '',
     }))
   }
 

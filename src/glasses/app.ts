@@ -8,6 +8,7 @@
 import type { GitHubRuntime } from '../even'
 import { GitHubClient } from '../github/client'
 import { ActivityService } from '../github/activity'
+import { SearchService } from '../github/search'
 import { NavStack, type ListItem, type Screen } from './navigation'
 import { Hud, type HudView } from './hud/display'
 import type { IconName } from './hud/art'
@@ -169,6 +170,7 @@ export class GlassesApp {
   private itemsCache = new Map<string, ListItem[]>()
   private prefetching = new Set<string>()
   private activity: ActivityService
+  private search: SearchService
   private feedEvents = new Map<string, any>()
   private feedPage = 1
   private feedHasMore = false
@@ -182,6 +184,7 @@ export class GlassesApp {
     this.client = client
     this.hud = new Hud(runtime)
     this.activity = new ActivityService(client)
+    this.search = new SearchService(client)
     this.state = state
     this.stack.replace({ kind: 'dashboard', module: 'dashboard', title: 'GITHUB', page: 0, selectedIndex: 0 })
   }
@@ -405,15 +408,19 @@ export class GlassesApp {
     if (cached) return cached
     const sections = screen.sections ?? []
     const out: string[] = []
-    sections.forEach((section, i) => {
-      if (sections.length > 1) {
-        if (i > 0) out.push('')
-        out.push(`[ ${section.label.toUpperCase()} ]`)
-      }
-      for (const line of section.lines) {
+    sections.forEach(section => {
+      const body = section.lines.flatMap(line => {
         const wrappedLine = wrap(line, BODY_PX)
-        out.push(...(wrappedLine.length ? wrappedLine : ['']))
+        return wrappedLine.length ? wrappedLine : ['']
+      })
+      const block = sections.length > 1 ? [`[ ${section.label.toUpperCase()} ]`, ...body] : body
+      const used = out.length % BODY_LINES
+      if (used > 0) {
+        const room = BODY_LINES - used
+        if (room >= block.length + 1) out.push('')
+        else while (out.length % BODY_LINES) out.push('')
       }
+      out.push(...block)
     })
     if (!out.length) out.push('Nothing to show.')
     this.wrapped.set(screen, out)
@@ -567,6 +574,11 @@ export class GlassesApp {
       title: moduleInfo(module).title,
       selectedIndex: 0,
     }
+    if (module === 'profile') {
+      if (fromMenu) while (!this.stack.isRoot()) this.stack.pop()
+      await this.openItem('profile', { id: 'profile', primary: `@${this.state.userLogin ?? ''}`, icon: 'person' })
+      return
+    }
     const cached = this.itemsCache.get(module)
     if (cached) screen.items = cached
     if (fromMenu) this.stack.resetTo(screen)
@@ -697,12 +709,13 @@ export class GlassesApp {
           return this.mapFeedItems(page.events)
         }
         case 'explore': {
-          const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-          const repos = await this.client.collect<any>(`/search/repositories?q=created:>${since}&sort=stars&order=desc`, { perPage: 20, maxPages: 2 })
+          const repos = await this.search.trending()
           return repos.map(r => ({
-            id: r.full_name,
-            primary: r.full_name,
-            secondary: `${r.language ?? ''} ★${r.stargazers_count}`,
+            id: r.full_name ?? r.name,
+            primary: r.full_name ?? r.name,
+            secondary: [r.language, `${formatCount(r.stargazers_count)} stars`].filter(Boolean).join(SEP),
+            icon: 'star',
+            details: [oneLine(r.description) || `created ${relativeTime(r.created_at ?? '')}`],
           }))
         }
         case 'actions': {
@@ -809,28 +822,9 @@ export class GlassesApp {
           })
           break
         }
-        case 'profile': {
-          const user = await this.client.get<any>('/user').catch(() => null)
-          if (user) {
-            this.stack.push({
-              kind: 'detail',
-              module: 'profile',
-              title: '@' + user.login,
-              sections: [{
-                label: 'Profile',
-                lines: [
-                  user.name ?? user.login,
-                  user.bio ?? '',
-                  `${user.public_repos} repos`,
-                  `${user.followers} followers`,
-                  `${user.following} following`,
-                ].filter(Boolean),
-              }],
-              sectionIndex: 0,
-            })
-          }
+        case 'profile':
+          await this.openProfile()
           break
-        }
         case 'feed': {
           const event = this.feedEvents.get(itemId)
           if (event) await this.openFeedEvent(event)
@@ -848,6 +842,67 @@ export class GlassesApp {
         sectionIndex: 0,
       })
     }
+  }
+
+  private async openProfile(): Promise<void> {
+    const login = this.state.userLogin ?? ''
+    const none = [] as any[]
+    const [user, repos, orgs, events] = await Promise.all([
+      this.client.get<any>('/user').catch(() => null),
+      this.client.collect<any>('/user/repos?affiliation=owner', { perPage: 100, maxPages: 3 }).catch(() => none),
+      this.client.get<any[]>('/user/orgs').catch(() => none),
+      this.client.get<any[]>(`/users/${encodeURIComponent(login)}/events?per_page=12`, false).catch(() => none),
+    ])
+    if (!user) return
+
+    const stars = repos.reduce((sum, r) => sum + (r.stargazers_count ?? 0), 0)
+    const forks = repos.reduce((sum, r) => sum + (r.forks_count ?? 0), 0)
+    const joined = user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''
+    const about = [
+      user.name ? `${user.name}  @${user.login}` : `@${user.login}`,
+      user.bio ?? '',
+      [user.company, user.location].filter(Boolean).join(SEP),
+      user.blog ? String(user.blog) : '',
+      joined ? `Joined ${joined}` : '',
+    ].filter(Boolean)
+    const numbers = [
+      `${formatCount(user.followers)} followers${SEP}${formatCount(user.following)} following`,
+      `${formatCount(repos.length || user.public_repos)} repos${SEP}${formatCount(stars)} stars${SEP}${formatCount(forks)} forks`,
+      `${formatCount(user.public_gists ?? 0)} gists${user.hireable ? `${SEP}open to work` : ''}`,
+    ]
+    if (this.stats?.contributions != null) numbers.unshift(`${formatCount(this.stats.contributions)} contributions in the last year`)
+
+    const sections = [
+      { label: 'About', lines: about },
+      { label: 'Numbers', lines: numbers },
+    ]
+    const top = [...repos].sort((a, b) => (b.stargazers_count ?? 0) - (a.stargazers_count ?? 0)).slice(0, 6)
+    if (top.length) {
+      sections.push({ label: 'Top repositories', lines: top.map(r => `${r.name}${SEP}${formatCount(r.stargazers_count)} stars${r.language ? `${SEP}${r.language}` : ''}`) })
+    }
+    const languages = new Map<string, number>()
+    for (const r of repos) if (r.language) languages.set(r.language, (languages.get(r.language) ?? 0) + 1)
+    const ranked = [...languages.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+    if (ranked.length) {
+      const total = ranked.reduce((sum, [, n]) => sum + n, 0)
+      sections.push({ label: 'Languages', lines: ranked.map(([name, n]) => `${name}${SEP}${Math.round((n / total) * 100)}%`) })
+    }
+    if (orgs.length) sections.push({ label: 'Organizations', lines: [orgs.map(o => o.login).join(', ')] })
+    if (events.length) {
+      sections.push({
+        label: 'Recent activity',
+        lines: events.slice(0, 8).map(e => `${feedEventLabel(e.type ?? '')}${SEP}${e.repo?.name ?? ''}${SEP}${relativeTime(e.created_at ?? '')}`),
+      })
+    }
+
+    this.stack.push({
+      kind: 'detail',
+      module: 'profile',
+      title: `@${user.login}`,
+      icon: 'person',
+      sections,
+      sectionIndex: 0,
+    })
   }
 
   private async openRepo(fullName: string): Promise<void> {
