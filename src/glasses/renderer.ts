@@ -1,200 +1,198 @@
+// HUD renderer for GitHub G2 glasses.
+//
+// The glasses draw one text container, so every screen is rendered as
+// box-drawing glyphs inside a fixed-width cell grid (~56 chars across at
+// the firmware's ~9 px per glyph). The frame is bevelled: chamfered
+// corners, header rule, pill scope bar, list rows with a right-edge hatch
+// strip and a dim corner bracket.
 import type { AppConfig } from '../config'
 
-function makeRenderer(config: AppConfig) {
-  const { brightText, dimText, normalText } = config
+interface ListItem {
+  id: string
+  primary: string
+  secondary?: string
+  scope?: string
+  details?: string[]
+}
 
-  function line(text: string, _color = normalText): string {
-    return text
+function makeRenderer(_config: AppConfig) {
+  const W = 56            // content width between borders
+  const BODY_ROWS = 7     // rows available for body content
+  const HATCH: string[] = ['╵', '│']   // right-edge hatch strip alternates
+
+  function pad(s: string): string {
+    return s.length >= W ? s.slice(0, W) : s + ' '.repeat(W - s.length)
   }
 
-  function wrap(text: string, maxChars: number): string[] {
-    if (!text) return ['']
-    const output: string[] = []
-    let remaining = text
-    while (remaining.length > maxChars) {
-      let split = remaining.lastIndexOf(' ', maxChars)
-      if (split < Math.floor(maxChars / 2)) split = maxChars
-      output.push(remaining.slice(0, split).trimEnd())
-      remaining = remaining.slice(split).trimStart()
-    }
-    output.push(remaining)
-    return output
+  function corner(top: boolean): string {
+    return top ? '╭─' : '╰─'
+  }
+
+  function border(top: boolean): string {
+    return ' ' + corner(top) + '─'.repeat(W) + (top ? '─╮' : '─╯') + ' '
+  }
+
+  function divider(): string {
+    return ' ├' + '─'.repeat(W) + '┤ '
+  }
+
+  function hatch(i: number): string {
+    return HATCH[i % HATCH.length]
+  }
+
+  function textRow(text: string, i: number): string {
+    return '│ ' + pad(text) + ' │' + hatch(i)
+  }
+
+  function blank(i: number): string {
+    return textRow('', i)
+  }
+
+  function header(title: string, i: number): string {
+    const suffix = ' ● │' + hatch(i)
+    const gap = ' '.repeat(Math.max(0, W - title.length - suffix.length + 4))
+    return '│ ' + title + gap + suffix
+  }
+
+  function pill(scope: string, i: number): string {
+    const suffix = '│' + hatch(i)
+    const body = '┌─ ' + scope
+    const gap = ' '.repeat(Math.max(0, W - body.length - suffix.length + 4))
+    return '│ ' + body + gap + suffix
+  }
+
+  function hintRow(i: number): string {
+    const text = '2x exit   swipe choose   tap open'
+    return '│ ' + pad(text) + ' │' + hatch(i)
   }
 
   function listScreen(
     title: string,
-    items: Array<{ primary: string; secondary?: string; details?: string[] }>,
+    items: ListItem[],
     selectedIndex: number,
-  ): { left: string; right: string } {
+  ): string {
+    const lines: string[] = []
+    lines.push(border(true))
+    lines.push(header(title, 0))
+    lines.push(divider())
+
+    const scope = items[0]?.scope
+    let row = 1
+    if (scope) {
+      lines.push(pill(scope, row))
+      row++
+    }
+
     const selected = Math.max(0, Math.min(selectedIndex, Math.max(0, items.length - 1)))
-    const itemLines = (item: { primary: string; secondary?: string; details?: string[] }, index: number): string[] => {
-      const marker = index === selected ? '> ' : '  '
-      const primary = wrap(item.primary, 52)
-      const lines = [line(marker + primary[0], index === selected ? brightText : normalText)]
-      lines.push(...primary.slice(1).map(value => line('  ' + value, normalText)))
-      if (item.secondary) lines.push(...wrap(item.secondary, 54).map(value => line('   ' + value, dimText)))
-      if (index === selected && item.details) {
-        for (const detail of item.details) lines.push(...wrap(detail, 54).map(value => line('   ' + value, normalText)))
-      }
-      return lines
-    }
-    const body: string[] = []
+
     if (items.length === 0) {
-      body.push(line('(none)', dimText))
+      lines.push(textRow('(none)', row))
+      row++
     } else {
-      const rendered = items.map((item, index) => itemLines(item, index))
-      const maxBodyLines = 8
-      let start = selected
-      let end = selected + 1
-      let used = rendered[selected]?.length ?? 0
-      let tryPrevious = selected > 0
-      while (true) {
-        const previousCost = tryPrevious && start > 0 ? rendered[start - 1].length : Infinity
-        const nextCost = end < rendered.length ? rendered[end].length : Infinity
-        if (previousCost === Infinity && nextCost === Infinity) break
-        if (tryPrevious && previousCost + used + 1 <= maxBodyLines) {
-          start -= 1
-          used += previousCost + 1
-        } else if (nextCost + used + 1 <= maxBodyLines) {
-          end += 1
-          used += nextCost + 1
-        } else if (previousCost + used + 1 <= maxBodyLines) {
-          start -= 1
-          used += previousCost + 1
-        } else {
-          break
+      // Keep the selection roughly centred, paging up when scrolling down.
+      const half = Math.floor((BODY_ROWS - 1) / 2)
+      let start = Math.max(0, Math.min(selected - half, items.length - BODY_ROWS))
+      start = Math.max(0, start)
+      const end = Math.min(items.length, start + BODY_ROWS)
+
+      for (let i = start; i < end; i++) {
+        const item = items[i]
+        const isSelected = i === selected
+        const marker = isSelected ? '> ' : '  '
+        const primary = item.secondary
+          ? item.primary + ' · ' + item.secondary
+          : item.primary
+        lines.push(textRow(marker + primary, row))
+        row++
+        if (isSelected && item.details) {
+          for (const d of item.details.slice(0, 1)) {
+            lines.push(textRow('   ' + d, row))
+            row++
+          }
         }
-        tryPrevious = !tryPrevious
-      }
-      for (let index = start; index < end; index += 1) {
-        if (index > start) body.push('')
-        body.push(...rendered[index])
+        if (i < end - 1 && row < 10) {
+          lines.push(blank(row))
+          row++
+        }
       }
     }
-    return {
-      left: '',
-      right: `${line(title, brightText)}\n\n${body.join('\n')}`,
+
+    while (row < 10) {
+      lines.push(blank(row))
+      row++
     }
+    lines.push(hintRow(row))
+    row++
+    lines.push(border(false))
+    return lines.join('\n')
   }
 
   function detailScreen(
     title: string,
-    fields: Array<{ label: string; value: string }>,
-  ): { left: string; right: string } {
+    sections: Array<{ label: string; lines: string[] }>,
+    sectionIndex: number,
+  ): string {
     const lines: string[] = []
-    for (const field of fields) {
-      lines.push(...wrap(field.label, 54).map(value => line(value, dimText)))
-      lines.push(...wrap('  ' + field.value, 54).map(value => line(value, normalText)))
-      lines.push('')
+    lines.push(border(true))
+    lines.push(header(title, 0))
+    lines.push(divider())
+
+    const section = sections[Math.max(0, Math.min(sectionIndex ?? 0, sections.length - 1))]
+    const body = [section.label, ...section.lines]
+    let row = 1
+    const maxRows = 7
+    let shown = 0
+
+    for (const line of body) {
+      if (shown >= maxRows) break
+      lines.push(textRow(line, row))
+      row++
+      shown++
     }
-    return {
-      left: '',
-      right: `${line(title, brightText)}\n\n${lines.join('\n')}`,
+
+    while (row < 10) {
+      lines.push(blank(row))
+      row++
     }
+    lines.push(hintRow(row))
+    row++
+    lines.push(border(false))
+    return lines.join('\n')
   }
 
-  function errorScreen(message: string): { left: string; right: string } {
-    return {
-      left: '',
-      right: `${line(config.errorTitle, brightText)}\n\n${wrap(message, 54).map(value => line(value, normalText)).join('\n')}`,
-    }
+  function errorScreen(message: string): string {
+    const lines: string[] = []
+    lines.push(border(true))
+    lines.push(header('Error', 0))
+    lines.push(divider())
+    lines.push(textRow(message, 1))
+    lines.push(blank(2))
+    lines.push(hintRow(3))
+    lines.push(border(false))
+    return lines.join('\n')
   }
 
-  function loadingScreen(title?: string): { left: string; right: string } {
-    return {
-      left: '',
-      right: `${line(title ?? config.loadingTitle, brightText)}\n\n${line('…', normalText)}`,
-    }
-  }
-
-  function welcomeScreen(): { left: string; right: string } {
-    const lines = [
-      line(config.welcomeTitle, brightText),
-      '',
-      line('NOT CONNECTED', dimText),
-      '',
-      line(config.welcomeBody[0], normalText),
-      line(config.welcomeBody[1], normalText),
-      line(config.welcomeBody[2], normalText),
-    ]
-    return {
-      left: '',
-      right: lines.join('\n'),
-    }
-  }
-
-  function repoListScreen(
-    repos: Array<{ full_name: string; description?: string | null; language?: string | null; stargazers_count: number; forks_count: number; updated_at: string }>,
-    selectedIndex: number,
-  ): { left: string; right: string } {
-    const items = repos.map(r => ({
-      primary: r.full_name,
-      secondary: `${r.language ?? ''} STARS: ${r.stargazers_count} · FORKS: ${r.forks_count}`,
-    }))
-    return listScreen('My Repositories', items, selectedIndex)
-  }
-
-  function prListScreen(
-    prs: Array<{ number: number; title: string; state: string; updated_at: string }>,
-    selectedIndex: number,
-  ): { left: string; right: string } {
-    const items = prs.map(p => ({
-      primary: `#${p.number} ${p.title}`,
-      secondary: `${p.state} · ${p.updated_at.slice(0, 10)}`,
-    }))
-    return listScreen('Pull Requests', items, selectedIndex)
-  }
-
-  function notificationListScreen(
-    notifs: Array<{ repository: string; subject: string; unread: boolean; updated_at: string }>,
-    selectedIndex: number,
-  ): { left: string; right: string } {
-    const items = notifs.map(n => ({
-      primary: n.unread ? `● ${n.subject}` : `○ ${n.subject}`,
-      secondary: `${n.repository} · ${n.updated_at.slice(0, 10)}`,
-    }))
-    return listScreen('Notifications', items, selectedIndex)
-  }
-
-  function issueListScreen(
-    issues: Array<{ number: number; title: string; state: string; updated_at: string }>,
-    selectedIndex: number,
-  ): { left: string; right: string } {
-    const items = issues.map(i => ({
-      primary: `#${i.number} ${i.title}`,
-      secondary: `${i.state} · ${i.updated_at.slice(0, 10)}`,
-    }))
-    return listScreen('Issues', items, selectedIndex)
-  }
-
-  function menuEntries(): Array<{ module: string; label: string }> {
-    return [
-      { module: 'feed', label: 'Feed' },
-      { module: 'pullRequests', label: 'Pull Requests' },
-      { module: 'notifications', label: 'Notifications' },
-      { module: 'issues', label: 'Issues' },
-      { module: 'collabPrs', label: 'Collab PRs' },
-      { module: 'explore', label: 'Explore' },
-      { module: 'myRepositories', label: 'My Repos' },
-      { module: 'contribution', label: 'Contribution' },
-      { module: 'codeSearch', label: 'Code Search' },
-      { module: 'actions', label: 'Actions' },
-      { module: 'profile', label: 'Profile' },
-    ]
+  function welcomeScreen(): string {
+    const lines: string[] = []
+    lines.push(border(true))
+    lines.push(header('[ GITHUB ]', 0))
+    lines.push(divider())
+    lines.push(textRow('NOT CONNECTED', 1))
+    lines.push(blank(2))
+    lines.push(textRow('Open the phone app to link', 3))
+    lines.push(textRow('your GitHub account.', 4))
+    lines.push(blank(5))
+    lines.push(hintRow(6))
+    lines.push(border(false))
+    return lines.join('\n')
   }
 
   return {
     listScreen,
     detailScreen,
     errorScreen,
-    loadingScreen,
     welcomeScreen,
-    repoListScreen,
-    prListScreen,
-    notificationListScreen,
-    issueListScreen,
-    menuEntries,
   }
 }
 
-export { makeRenderer }
+export { makeRenderer, type ListItem }

@@ -149,11 +149,11 @@ export class GlassesApp {
     const screen = this.stack.current
     if (!screen) return
     const right = await this.renderScreen(screen)
-    await this.runtime.render('', right)
+    await this.runtime.renderScreen(right)
   }
 
   private async renderScreen(screen: Screen): Promise<string> {
-    if (!this.state.token) return this.render.welcomeScreen().right
+    if (!this.state.token) return this.render.welcomeScreen()
 
     switch (screen.kind) {
       case 'moduleList':
@@ -165,11 +165,11 @@ export class GlassesApp {
       case 'diff':
         return this.renderDiff(screen)
       default:
-        return this.render.errorScreen('Unknown screen').right
+        return this.render.errorScreen('Unknown screen')
     }
   }
 
-  // ── Screens ──────────────────────────────────────────────────────────
+  // Render the active navigation screen.
 
   private renderModuleList(): string {
     const enabled = this.enabledModules
@@ -178,7 +178,7 @@ export class GlassesApp {
       return { id, primary: m.label, secondary: this.countLabel(id) }
     })
     const selected = Math.max(0, enabled.indexOf(this.stack.current?.module as ModuleId ?? enabled[0]))
-    return this.render.listScreen('GitHub', items, selected).right
+    return this.render.listScreen('GitHub', items, selected)
   }
 
   private countLabel(_id: string): string {
@@ -188,17 +188,13 @@ export class GlassesApp {
   private renderItemList(screen: Screen): string {
     const items = screen.items ?? []
     const idx = screen.selectedIndex ?? 0
-    return this.render.listScreen(screen.title, items, idx).right
+    return this.render.listScreen(screen.title, items, idx)
   }
 
   private renderDetail(screen: Screen): string {
     const sections = screen.sections ?? []
-    if (sections.length === 0) return this.render.errorScreen('No details').right
-    const title = this.wrapDetailLines([screen.title]).join('\n')
-    const lines = this.wrapDetailLines(sections.flatMap(entry => [entry.label, ...entry.lines, '']))
-    const offset = Math.min(screen.detailOffset ?? 0, Math.max(0, lines.length - 7))
-    const body = lines.slice(offset, offset + 7)
-    return `${title}\n\n${body.join('\n')}`
+    if (sections.length === 0) return this.render.errorScreen('No details')
+    return this.render.detailScreen(screen.title, sections, screen.sectionIndex ?? 0)
   }
 
   private wrapDetailLines(lines: string[]): string[] {
@@ -224,7 +220,7 @@ export class GlassesApp {
     return this.renderDetail(screen)
   }
 
-  // ── Data fetching per module ─────────────────────────────────────────
+  // Fetch list items for the selected module.
 
   private async fetchItems(module: string): Promise<Array<{ id: string; primary: string; secondary?: string; details?: string[] }>> {
     const cached = this.itemsCache.get(module)
@@ -254,6 +250,7 @@ export class GlassesApp {
             id: r.full_name,
             primary: `${r.full_name} [${r.private ? 'private' : 'public'}]`,
             secondary: `PR: ${prCounts.get(r.full_name) ?? 0} · STARS: ${r.stargazers_count} · ISSUES: ${issueCounts.get(r.full_name) ?? 0} · FORKS: ${r.forks_count}`,
+            scope: 'My Repos',
             details: [`UPDATED ${relativeTime(r.updated_at)}`],
           }))
         }
@@ -268,6 +265,7 @@ export class GlassesApp {
             id: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number}`,
             primary: p.title,
             secondary: `${p.repository_url?.split('/repos/')[1] ?? 'unknown'}#${p.number}`,
+            scope: 'Open PRs',
             details: [`${p.user?.login ?? 'someone'} opened · Updated ${relativeTime(p.updated_at ?? '')}`],
           }))
         }
@@ -377,7 +375,7 @@ export class GlassesApp {
     })
   }
 
-  // ── Detail rendering per module ──────────────────────────────────────
+  // Load details for the selected item.
 
   private async openItem(module: string, itemId: string): Promise<void> {
     try {
@@ -667,7 +665,7 @@ export class GlassesApp {
     })
   }
 
-  // ── Gesture handling ─────────────────────────────────────────────────
+  // Register handlers for the glasses controls.
 
   bind(): void {
     const runtime = this.runtime
@@ -796,7 +794,7 @@ export class GlassesApp {
         await this.openItem(screen.module, item.id)
       }
     } else if (screen.kind === 'detail') {
-      // Tap on detail: if it's a PR with files, go to diff viewer for first file
+      // Open the first changed file from a pull request.
       const payload = screen.payload as any
       if (payload?.files?.length > 0) {
         const file = payload.files[0]
