@@ -85,7 +85,6 @@ export interface ModulePrefs {
   pullRequests: boolean
   notifications: boolean
   issues: boolean
-  collabPrs: boolean
   explore: boolean
   myRepositories: boolean
   contribution: boolean
@@ -114,13 +113,12 @@ export const DEFAULT_MODULES: ModulePrefs = {
   pullRequests: true,
   notifications: true,
   issues: true,
-  collabPrs: false,
-  explore: false,
+  explore: true,
   myRepositories: true,
   contribution: true,
   codeSearch: false,
-  actions: false,
-  profile: false,
+  actions: true,
+  profile: true,
 }
 
 export const DEFAULT_DISPLAY: DisplayPrefs = {
@@ -144,7 +142,6 @@ export type ModuleId =
   | 'pullRequests'
   | 'notifications'
   | 'issues'
-  | 'collabPrs'
   | 'explore'
   | 'myRepositories'
   | 'contribution'
@@ -162,7 +159,6 @@ export const MODULE_ORDER: NavEntry[] = [
   { module: 'pullRequests', label: 'Pull Requests' },
   { module: 'notifications', label: 'Notifications' },
   { module: 'issues', label: 'Issues' },
-  { module: 'collabPrs', label: 'Collab PRs' },
   { module: 'explore', label: 'Explore' },
   { module: 'myRepositories', label: 'My Repositories' },
   { module: 'contribution', label: 'Contribution' },

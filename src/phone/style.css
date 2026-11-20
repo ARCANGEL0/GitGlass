@@ -1191,3 +1191,19 @@ input:focus-visible {
 .pr-status--closed {
   color: var(--danger);
 }
+
+.run-status--running {
+  color: var(--accent);
+}
+
+.run-status--success {
+  color: var(--success);
+}
+
+.run-status--skipped {
+  color: var(--text-faint);
+}
+
+.run-status--failed {
+  color: var(--danger);
+}

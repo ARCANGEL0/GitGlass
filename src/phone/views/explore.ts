@@ -38,7 +38,7 @@ export function renderExplore({ repos, onBack, onRepo }: ExploreProps): HTMLElem
   container.innerHTML = `
     <div class="page-header">
       <button class="btn btn-back" id="back-btn">Back</button>
-      <h1>Explore</h1>
+      <h1>Trending</h1>
     </div>
     <div class="card">
       ${repos.length === 0

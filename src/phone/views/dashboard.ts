@@ -10,16 +10,15 @@ export interface DashboardProps {
 
 const MODULE_CARDS = [
   { id: 'feed', label: 'Feed', desc: 'Activity, stars, forks, followers' },
-  { id: 'pullRequests', label: 'My PRs', desc: 'PRs you submitted — open the full thread' },
+  { id: 'pullRequests', label: 'PRs on my repos', desc: 'Open pull requests sent to your repositories' },
   { id: 'notifications', label: 'Notifications', desc: 'Unread and participating' },
   { id: 'issues', label: 'Issues', desc: 'Issues on your repositories' },
-  { id: 'collabPrs', label: 'Collab PRs', desc: 'PRs others made on your repos' },
   { id: 'explore', label: 'Trending', desc: 'Trending repositories with details' },
   { id: 'myRepositories', label: 'My Repositories', desc: 'Browse your repos and their contents' },
-  { id: 'contribution', label: 'Contribution', desc: 'Pull requests you made' },
+  { id: 'contribution', label: 'My PRs', desc: 'Pull requests you opened, with the full thread' },
   { id: 'codeSearch', label: 'Code Search', desc: 'Search code across GitHub' },
-  { id: 'actions', label: 'Actions', desc: 'Workflow runs' },
-  { id: 'profile', label: 'Profile', desc: 'Your GitHub profile' },
+  { id: 'actions', label: 'Actions', desc: 'Running and recent workflow runs' },
+  { id: 'profile', label: 'My profile', desc: 'Your GitHub profile' },
 ]
 
 export function renderDashboard({

@@ -21,7 +21,6 @@ import { renderPullRequests } from './views/pull-requests'
 import { renderContribution } from './views/contribution'
 import { renderNotifications } from './views/notifications'
 import { renderIssues } from './views/issues'
-import { renderCollabPrs } from './views/collab-prs'
 import { renderExplore } from './views/explore'
 import { renderCodeSearch } from './views/code-search'
 import { renderActions } from './views/actions'
@@ -39,7 +38,6 @@ type View =
   | 'pullRequests'
   | 'notifications'
   | 'issues'
-  | 'collabPrs'
   | 'explore'
   | 'codeSearch'
   | 'actions'
@@ -52,10 +50,9 @@ type PullRequestItem = { repo: string; number: number; title: string; state: 'op
 type ContributionItem = { repo: string; number: number; title: string; state: 'open' | 'closed' | 'merged'; author: string; updatedAt: string; htmlUrl?: string }
 type NotificationItem = { repository: string; subject: string; type: string; reason: string; unread: boolean; updatedAt: string }
 type IssueItem = { repo: string; number: number; title: string; state: 'open' | 'closed'; author: string; labels: Array<{ name: string }>; assignee?: string | null; updatedAt: string }
-type CollabPrItem = { repo: string; number: number; title: string; author: string; createdAt: string; updatedAt: string; reviewStatus: 'none' | 'approved' | 'changes-requested' | 'commented'; mergeable: boolean | null; draft: boolean; requestedReviewers: string[] }
 type RepoOverview = { name: string; owner: string; description?: string | null; language?: string | null; stars: number; forks: number; issues: number; updatedAt: string }
 type SearchResultItem = { type: 'repository' | 'issue' | 'pull_request' | 'user' | 'code'; name: string; fullName?: string; owner?: string; description?: string | null; url: string }
-type WorkflowRunItem = { name: string; repository: string; branch: string; status: 'queued' | 'in_progress' | 'completed'; conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null; event: string; createdAt: string }
+type WorkflowRunItem = { name: string; title: string; repository: string; branch: string; status: string; conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null; event: string; createdAt: string }
 
 function eventTypeLabel(type: string, owned = false): string {
   const labels: Record<string, string> = {
@@ -349,18 +346,6 @@ export class PhoneApp {
         )
         break
       }
-      case 'collabPrs': {
-        const prs = await this.fetchCollabPrs()
-        if (renderVersion !== this.renderVersion) return
-        mount(
-          renderCollabPrs({
-            prs,
-            onBack: () => this.navigate('dashboard'),
-            onPr: () => {},
-          }),
-        )
-        break
-      }
       case 'explore': {
         const repos = await this.fetchExplore()
         if (renderVersion !== this.renderVersion) return
@@ -606,29 +591,6 @@ export class PhoneApp {
 
   // Load open pull requests from other users on owned repositories.
 
-  private async fetchCollabPrs(): Promise<CollabPrItem[]> {
-    const repos = await this.repos.list({ perPage: 10, maxPages: 2 }).catch(() => [] as any[])
-    const prs: any[] = []
-    for (const repo of repos.slice(0, 5)) {
-      const repoPrs = await this.pulls.listForRepo(repo.full_name, { perPage: 10, maxPages: 1 }).catch(() => [] as any[])
-      prs.push(...repoPrs.map(p => ({ ...p, repo: repo.full_name })))
-    }
-    return prs
-      .filter(p => p.user?.login?.toLowerCase() !== this.state.userLogin?.toLowerCase())
-      .map(p => ({
-        repo: p.repo,
-        number: p.number,
-        title: p.title,
-        author: p.user?.login ?? '',
-        createdAt: p.created_at,
-        updatedAt: p.updated_at,
-        reviewStatus: 'none' as const,
-        mergeable: null,
-        draft: p.draft,
-        requestedReviewers: [],
-      }))
-  }
-
   // Load repositories for the Explore view.
 
   private async fetchExplore(): Promise<RepoOverview[]> {
@@ -662,24 +624,20 @@ export class PhoneApp {
   // Load workflow runs from the user's repositories.
 
   private async fetchActions(): Promise<WorkflowRunItem[]> {
-    const repos = await this.repos.list().catch(() => [] as any[])
-    const runs: WorkflowRunItem[] = []
-    for (const repo of repos.slice(0, 3)) {
-      try {
-        const repoRuns = await this.actions.listForRepo(repo.full_name).catch(() => [] as any[])
-        runs.push(...repoRuns.map((r: any) => ({
-          name: r.name,
-          repository: r.head_repository.full_name,
-          branch: r.head_branch,
-          status: r.status as 'queued' | 'in_progress' | 'completed',
-          conclusion: r.conclusion as any,
-          event: r.event,
-          createdAt: r.created_at,
-        })))
-      } catch {
-        // Skip this repository if its request fails.
-      }
-    }
-    return runs
+    const repos = await this.client
+      .collect<any>('/user/repos?affiliation=owner&sort=pushed&direction=desc', { perPage: 8, maxPages: 1 })
+      .catch(() => [] as any[])
+    const runs = await this.actions.recent(repos.map(r => r.full_name), 8)
+    return runs.slice(0, 40).map(run => ({
+      name: run.name,
+      title: run.display_title || run.name,
+      repository: run.repo,
+      branch: run.head_branch,
+      status: run.status,
+      conclusion: run.conclusion,
+      event: run.event,
+      createdAt: run.run_started_at ?? run.created_at,
+    }))
   }
+
 }

@@ -31,7 +31,7 @@ export function renderContribution({ items, onBack, onItem }: ContributionProps)
   container.innerHTML = `
     <div class="page-header">
       <button class="btn btn-back" id="back-btn">Back</button>
-      <h1>Contribution</h1>
+      <h1>My PRs</h1>
     </div>
     <div class="card">
       ${items.length === 0

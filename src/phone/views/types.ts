@@ -63,19 +63,6 @@ export interface IssueItem {
   updatedAt: string
 }
 
-export interface CollabPrItem {
-  repo: string
-  number: number
-  title: string
-  author: string
-  createdAt: string
-  updatedAt: string
-  reviewStatus: 'none' | 'approved' | 'changes-requested' | 'commented'
-  mergeable: boolean | null
-  draft: boolean
-  requestedReviewers: string[]
-}
-
 export interface RepoOverview {
   name: string
   owner: string

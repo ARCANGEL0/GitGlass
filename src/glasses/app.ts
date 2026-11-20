@@ -9,6 +9,7 @@ import type { GitHubRuntime } from '../even'
 import { GitHubClient } from '../github/client'
 import { ActivityService } from '../github/activity'
 import { SearchService } from '../github/search'
+import { ActionsService, isActiveRun, type WorkflowJob, type WorkflowRun } from '../github/actions'
 import { NavStack, type ListItem, type Screen } from './navigation'
 import { Hud, type HudView } from './hud/display'
 import type { IconName } from './hud/art'
@@ -33,16 +34,15 @@ export const MODULES: readonly ModuleInfo[] = [
   { id: 'feed', label: 'Feed', title: 'FEED', icon: 'pulse' },
   { id: 'explore', label: 'Trending', title: 'TRENDING', icon: 'star' },
   { id: 'myRepositories', label: 'My repos', title: 'MY REPOS', icon: 'repo' },
-  { id: 'collabPrs', label: 'Collab PRs', title: 'COLLAB PRS', icon: 'people' },
   { id: 'actions', label: 'Actions', title: 'ACTIONS', icon: 'play' },
-  { id: 'profile', label: 'Profile', title: 'PROFILE', icon: 'person' },
+  { id: 'profile', label: 'My profile', title: 'PROFILE', icon: 'person' },
 ]
 
 /** Hold-menu entries: the dashboard, then every module. Max 10 on the glass. */
 export const DASHBOARD_MENU_ID = 100
 export const GLASSES_MENU = [
   { id: DASHBOARD_MENU_ID, label: 'Dashboard' },
-  ...MODULES.slice(0, 9).map((m, i) => ({ id: DASHBOARD_MENU_ID + 1 + i, label: m.label })),
+  ...MODULES.map((m, i) => ({ id: DASHBOARD_MENU_ID + 1 + i, label: m.label })),
 ]
 
 const DASHBOARD_PAGES = 3
@@ -117,6 +117,33 @@ function relativeTime(iso: string): string {
   return `${weeks} week${weeks === 1 ? '' : 's'} ago`
 }
 
+function runIcon(run: Pick<WorkflowRun, 'status' | 'conclusion'>): IconName {
+  if (isActiveRun(run)) return 'play'
+  if (run.conclusion === 'success') return 'check'
+  if (run.conclusion === 'skipped' || run.conclusion === 'neutral') return 'commit'
+  return 'cross'
+}
+
+function runState(run: Pick<WorkflowRun, 'status' | 'conclusion'>): string {
+  if (run.status === 'in_progress') return 'running'
+  if (isActiveRun(run)) return run.status
+  return (run.conclusion ?? 'done').replace('_', ' ')
+}
+
+function stepMark(step: { status: string; conclusion: string | null }): string {
+  if (step.status !== 'completed') return step.status === 'in_progress' ? '▶' : '○'
+  if (step.conclusion === 'success') return '●'
+  if (step.conclusion === 'skipped') return '-'
+  return 'x'
+}
+
+function duration(from: number, to: number): string {
+  const seconds = Math.max(0, Math.round((to - from) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+}
+
 function prIcon(item: any): IconName {
   if (item.pull_request?.merged_at || item.merged_at) return 'check'
   return item.state === 'closed' ? 'cross' : 'pull'
@@ -171,6 +198,7 @@ export class GlassesApp {
   private prefetching = new Set<string>()
   private activity: ActivityService
   private search: SearchService
+  private actions: ActionsService
   private feedEvents = new Map<string, any>()
   private feedPage = 1
   private feedHasMore = false
@@ -185,6 +213,7 @@ export class GlassesApp {
     this.hud = new Hud(runtime)
     this.activity = new ActivityService(client)
     this.search = new SearchService(client)
+    this.actions = new ActionsService(client)
     this.state = state
     this.stack.replace({ kind: 'dashboard', module: 'dashboard', title: 'GITHUB', page: 0, selectedIndex: 0 })
   }
@@ -665,20 +694,6 @@ export class GlassesApp {
             details: [`by ${p.user?.login ?? this.state.userLogin ?? ''} · Updated ${relativeTime(p.updated_at ?? '')}`],
           }))
         }
-        case 'collabPrs': {
-          const repos = await this.client.collect<any>('/user/repos?affiliation=owner&sort=updated', { perPage: 10, maxPages: 1 })
-          const lists = await Promise.all(repos.slice(0, 6).map(repo =>
-            this.client.collect<any>(`/repos/${this.repoPath(repo.full_name)}/pulls?state=open`, { perPage: 10, maxPages: 1 })
-              .then(r => r.map(p => ({ ...p, repo: repo.full_name })))
-              .catch(() => [] as any[]),
-          ))
-          return lists.flat().map(p => ({
-            id: `${p.repo}#${p.number}`,
-            primary: `#${p.number} ${p.title}`,
-            secondary: `${p.repo} · ${p.user?.login ?? ''}`,
-            icon: prIcon(p),
-          }))
-        }
         case 'issues': {
           const query = encodeURIComponent(`is:issue state:open archived:false user:${this.state.userLogin ?? ''} sort:updated-desc`)
           const result = await this.client.get<{ items?: any[] }>(
@@ -719,17 +734,16 @@ export class GlassesApp {
           }))
         }
         case 'actions': {
-          const repos = await this.client.collect<any>('/user/repos', { perPage: 5, maxPages: 1 })
-          const lists = await Promise.all(repos.slice(0, 3).map(repo =>
-            this.client.get<{ workflow_runs?: any[] }>(`/repos/${this.repoPath(repo.full_name)}/actions/runs?per_page=10`)
-              .then(r => (r.workflow_runs ?? []).map(x => ({ ...x, repo: repo.full_name })))
-              .catch(() => [] as any[]),
-          ))
-          const runs = lists.flat()
-          return runs.map(r => ({
-            id: String(r.id),
-            primary: r.name ?? 'Workflow',
-            secondary: `${r.repo} · ${r.status}${r.conclusion ? ' · ' + r.conclusion : ''}`,
+          const repos = await this.client.collect<any>('/user/repos?affiliation=owner&sort=pushed&direction=desc', { perPage: 8, maxPages: 1 })
+          const runs = await this.actions.recent(repos.slice(0, 8).map(r => r.full_name), 8)
+          const running = runs.filter(isActiveRun).length
+          if (this.stats) this.stats.counts.actions = running
+          return runs.slice(0, 40).map(run => ({
+            id: `${run.repo}#${run.id}`,
+            primary: run.display_title || run.name,
+            secondary: `${run.repo.split('/')[1]}${SEP}${run.head_branch}`,
+            icon: runIcon(run),
+            details: [`${runState(run)}${SEP}${relativeTime(run.run_started_at ?? run.created_at)}${SEP}${run.name}`],
           }))
         }
         case 'profile': {
@@ -790,7 +804,6 @@ export class GlassesApp {
           break
         case 'pullRequests':
         case 'contribution':
-        case 'collabPrs':
           await this.openPr(module, itemId)
           break
         case 'issues':
@@ -812,16 +825,9 @@ export class GlassesApp {
           }
           break
         }
-        case 'actions': {
-          this.stack.push({
-            kind: 'detail',
-            module,
-            title: itemId,
-            sections: [{ label: 'Run', lines: ['Loading run details...'] }],
-            sectionIndex: 0,
-          })
+        case 'actions':
+          await this.openRun(itemId)
           break
-        }
         case 'profile':
           await this.openProfile()
           break
@@ -842,6 +848,42 @@ export class GlassesApp {
         sectionIndex: 0,
       })
     }
+  }
+
+  private async openRun(itemId: string): Promise<void> {
+    const cut = itemId.lastIndexOf('#')
+    const repo = itemId.slice(0, cut)
+    const id = Number(itemId.slice(cut + 1))
+    const [run, jobs] = await Promise.all([
+      this.actions.run(repo, id).catch(() => null),
+      this.actions.jobs(repo, id).catch(() => [] as WorkflowJob[]),
+    ])
+    if (!run) return
+    const started = run.run_started_at ?? run.created_at
+    const ended = isActiveRun(run) ? Date.now() : Date.parse(run.updated_at ?? started)
+    const sections = [
+      {
+        label: 'Run',
+        lines: [
+          `${run.name} #${run.run_number ?? ''}`.trim(),
+          `${repo}${SEP}${run.head_branch}`,
+          `${runState(run)}${SEP}${duration(Date.parse(started), ended)}`,
+          `${run.event} by ${run.actor?.login ?? 'someone'}${SEP}${relativeTime(started)}`,
+        ],
+      },
+    ]
+    for (const job of jobs) {
+      const steps = (job.steps ?? []).map(step => `${stepMark(step)} ${step.name}`)
+      sections.push({ label: `${stepMark(job)} ${job.name}`, lines: steps.length ? steps : [job.status] })
+    }
+    this.stack.push({
+      kind: 'detail',
+      module: 'actions',
+      title: run.display_title || run.name,
+      icon: runIcon(run),
+      sections,
+      sectionIndex: 0,
+    })
   }
 
   private async openProfile(): Promise<void> {

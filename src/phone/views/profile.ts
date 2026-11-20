@@ -21,7 +21,7 @@ export function renderProfile({ user, onBack }: ProfileProps): HTMLElement {
   container.innerHTML = `
     <div class="page-header">
       <button class="btn btn-back" id="back-btn">Back</button>
-      <h1>Profile</h1>
+      <h1>My profile</h1>
     </div>
 
     <div class="profile-card">

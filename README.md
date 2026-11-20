@@ -15,15 +15,23 @@ and settings.
 |---|---|
 | ![Overview](docs/screenshots/01-overview.png) | ![Pull requests](docs/screenshots/02-pull-requests.png) |
 | **Overview.** Contributions in the last year next to your contribution heatmap, plus repos, stars and followers. | **Pull requests.** How many of your PRs were merged, with a merged / open / closed bar. |
-| ![Modules](docs/screenshots/04-modules-select.png) | ![List](docs/screenshots/05-list.png) |
-| **Modules.** Every module as a node on a git graph, with live counts. | **Lists.** Swipe to pick a row. The counter shows where you are. |
-| ![Detail](docs/screenshots/07-detail.png) | ![Diff](docs/screenshots/09-diff.png) |
-| **Details.** The whole PR thread: overview, comments, reviews, files, commits. | **Diffs.** Tap a PR to read the patch of its first changed file. |
+| ![Modules](docs/screenshots/03-modules.png) | ![My PRs](docs/screenshots/05-my-prs-merged.png) |
+| **Modules.** Every module as a node on a git graph, with live counts. | **My PRs.** Each pull request shows its state: open, merged (check) or closed (X). |
+| ![PR detail](docs/screenshots/06-pr-detail.png) | ![Diff](docs/screenshots/07-diff.png) |
+| **Pull request.** The whole thread: overview, conversation, reviews, files, commits. | **Diffs.** Tap a PR to read the patch of its first changed file. |
+| ![Feed](docs/screenshots/08-feed.png) | ![Feed item](docs/screenshots/09-feed-comment.png) |
+| **Feed.** Stars, forks, pushes, releases, issues and PRs around you. | **Feed items** open what they are about. A comment opens its issue, comment first. |
+| ![Actions](docs/screenshots/11-actions.png) | ![Workflow run](docs/screenshots/12-action-run.png) |
+| **Actions.** Running and queued workflows first, then recent runs, each with its result. | **Workflow runs** list every job and step as it runs. |
+| ![Trending](docs/screenshots/10-trending.png) | ![My profile](docs/screenshots/13-profile.png) |
+| **Trending.** This week's most-starred new repositories. | **My profile.** Bio, numbers, top repositories, languages, organizations and recent activity. |
 
-The phone side holds the token, module toggles and a full dashboard:
+The phone side holds the token, module toggles and the same modules on a bigger screen:
 
 <p align="center">
-  <img src="docs/screenshots/phone.png" alt="Phone dashboard" width="420">
+  <img src="docs/screenshots/phone-dashboard.png" alt="Phone dashboard" width="260">
+  <img src="docs/screenshots/phone-my-prs.png" alt="My PRs on the phone" width="260">
+  <img src="docs/screenshots/phone-actions.png" alt="Actions on the phone" width="260">
 </p>
 
 Screenshots are from the Even Hub simulator on sample data (`VITE_HUD_DEMO=1`).
@@ -34,12 +42,13 @@ Screenshots are from the Even Hub simulator on sample data (`VITE_HUD_DEMO=1`).
 - **PRs on my repos**: open pull requests other people sent you
 - **Issues**: open issues on your repositories
 - **Notifications**: your unread GitHub inbox
-- **Feed**: stars, forks, follows, pushes and releases around you
-- **Trending**: repositories that picked up the most stars this week
+- **Feed**: stars, forks, follows, pushes and releases around you, each opening the issue, PR, comment, release or commits it is about
+- **Trending**: new repositories that picked up the most stars this week
 - **My repos**: your repositories with stars, PRs, issues, languages and recent commits
-- **Collab PRs**, **Actions**, **Profile**
+- **Actions**: workflows running now, then recent runs, down to each job and step
+- **My profile**: bio, numbers, top repositories, languages, organizations and recent activity
 
-Turn modules on or off from the phone. The dashboard graph and the hold menu follow.
+Turn modules on or off from the phone. The dashboard graph follows, and every module is in the hold menu.
 
 ## Controls
 

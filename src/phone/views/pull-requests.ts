@@ -40,7 +40,7 @@ export function renderPullRequests({ prs, onBack, onPr }: PullRequestsProps): HT
   container.innerHTML = `
     <div class="page-header">
       <button class="btn btn-back" id="back-btn">Back</button>
-      <h1>Pull Requests</h1>
+      <h1>PRs on my repos</h1>
     </div>
     <div class="card">
       ${prs.length === 0

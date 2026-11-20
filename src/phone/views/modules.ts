@@ -9,16 +9,15 @@ export interface ModulesProps {
 
 const MODULES: Array<{ id: keyof ModulePrefs; label: string; desc: string }> = [
   { id: 'feed', label: 'Feed', desc: 'Activity from your repositories' },
-  { id: 'pullRequests', label: 'Pull Requests', desc: 'PRs created by, assigned to, or reviewing you' },
+  { id: 'pullRequests', label: 'PRs on my repos', desc: 'Open pull requests sent to your repositories' },
   { id: 'notifications', label: 'Notifications', desc: 'Unread and participating notifications' },
   { id: 'issues', label: 'Issues', desc: 'Issues across your repositories' },
-  { id: 'collabPrs', label: 'Collab PRs', desc: 'PRs from collaborators on your repos' },
   { id: 'explore', label: 'Explore', desc: 'Discover trending repositories' },
   { id: 'myRepositories', label: 'My Repositories', desc: 'Your own repositories' },
-  { id: 'contribution', label: 'Contribution', desc: 'Pull requests you made' },
+  { id: 'contribution', label: 'My PRs', desc: 'Pull requests you opened' },
   { id: 'codeSearch', label: 'Code Search', desc: 'Search code across GitHub' },
-  { id: 'actions', label: 'Actions', desc: 'GitHub Actions workflow runs' },
-  { id: 'profile', label: 'Profile', desc: 'Your GitHub profile' },
+  { id: 'actions', label: 'Actions', desc: 'Running and recent workflow runs' },
+  { id: 'profile', label: 'My profile', desc: 'Your GitHub profile' },
 ]
 
 export function renderModules({ prefs, onChange, onBack }: ModulesProps): HTMLElement {

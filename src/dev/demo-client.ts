@@ -6,6 +6,7 @@ import { GitHubClient } from '../github/client'
 import { DEFAULT_MODULES, type ModulePrefs } from '../types'
 
 const LOGIN = 'octo-dev'
+const AVATAR = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#1f2a37"/><circle cx="32" cy="25" r="11" fill="#69c17a"/><path d="M12 58c3-12 11-17 20-17s17 5 20 17" fill="#69c17a"/></svg>')
 
 const repos = [
   { owner: { login: LOGIN }, full_name: `${LOGIN}/g2git`, name: 'g2git', private: false, stargazers_count: 412, forks_count: 31, open_issues_count: 7, updated_at: new Date(Date.now() - 3600e3).toISOString(), language: 'TypeScript' },
@@ -57,7 +58,7 @@ export class DemoClient extends GitHubClient {
   async get<T>(path: string): Promise<T> {
     await new Promise(resolve => setTimeout(resolve, 150))
     if (path === '/user') {
-      return { login: LOGIN, name: 'Octo Dev', public_repos: 48, total_private_repos: 9, followers: 2548, following: 31, bio: 'Building HUDs.', company: 'Octo Labs', location: 'Lisbon', blog: 'octo.dev', created_at: '2014-03-02T00:00:00Z', public_gists: 12 } as T
+      return { login: LOGIN, name: 'Octo Dev', avatar_url: AVATAR, public_repos: 48, total_private_repos: 9, followers: 2548, following: 31, bio: 'Building HUDs.', company: 'Octo Labs', location: 'Lisbon', blog: 'octo.dev', created_at: '2014-03-02T00:00:00Z', public_gists: 12 } as T
     }
     if (path === '/user/orgs') return [{ login: 'even-hud' }, { login: 'octo-labs' }] as T
     if (path.startsWith('/users/') && path.includes('/events')) {
@@ -88,6 +89,18 @@ export class DemoClient extends GitHubClient {
       }
       return { items: query.includes('is:issue') ? issueItems : prItems } as T
     }
+    const jobs = path.match(/\/actions\/runs\/(\d+)\/jobs$/)
+    if (jobs) {
+      const step = (name: string, status: string, conclusion: string | null) => ({ name, status, conclusion })
+      return { jobs: [
+        { name: 'build', status: 'completed', conclusion: 'success', steps: [step('Checkout', 'completed', 'success'), step('Install', 'completed', 'success'), step('Type check', 'completed', 'success')] },
+        { name: 'simulator tests', status: 'in_progress', conclusion: null, steps: [step('Start simulator', 'completed', 'success'), step('Drive HUD screens', 'in_progress', null), step('Compare screenshots', 'queued', null)] },
+      ] } as T
+    }
+    const run = path.match(/\/repos\/(.+)\/actions\/runs\/(\d+)$/)
+    if (run) return demoRuns(run[1]).find(r => r.id === Number(run[2])) as T
+    const runs = path.match(/\/repos\/(.+)\/actions\/runs\?/)
+    if (runs) return { workflow_runs: demoRuns(decodeURIComponent(runs[1])) } as T
     const issue = path.match(/\/repos\/(.+)\/issues\/(\d+)$/)
     if (issue) {
       const found = issueItems.find(i => i.number === Number(issue[2]))
@@ -133,3 +146,22 @@ export class DemoClient extends GitHubClient {
 export const DEMO_LOGIN = LOGIN
 
 export const DEMO_MODULES = Object.fromEntries(Object.keys(DEFAULT_MODULES).map(key => [key, true])) as unknown as ModulePrefs
+
+function demoRuns(repo: string) {
+  const at = (min: number) => new Date(Date.now() - min * 60e3).toISOString()
+  const base = { head_branch: 'master', event: 'push', actor: { login: LOGIN }, html_url: '' }
+  if (repo.endsWith('/g2git')) {
+    return [
+      { ...base, id: 901, run_number: 88, name: 'CI', display_title: 'fix issue fetchpr', status: 'in_progress', conclusion: null, created_at: at(3), run_started_at: at(3), updated_at: at(1) },
+      { ...base, id: 900, run_number: 87, name: 'CI', display_title: 'fix trending', status: 'completed', conclusion: 'success', created_at: at(55), run_started_at: at(55), updated_at: at(51) },
+      { ...base, id: 899, run_number: 86, name: 'Release', display_title: 'v1.4.1', event: 'release', status: 'completed', conclusion: 'failure', created_at: at(300), run_started_at: at(300), updated_at: at(296) },
+    ]
+  }
+  if (repo.endsWith('/hud-kit')) {
+    return [
+      { ...base, id: 801, run_number: 41, name: 'Deploy docs', display_title: 'Add bevelled card component', head_branch: 'main', status: 'queued', conclusion: null, created_at: at(1), updated_at: at(1) },
+      { ...base, id: 800, run_number: 40, name: 'CI', display_title: 'Quantize text to 16 grey levels', head_branch: 'grey-levels', event: 'pull_request', status: 'completed', conclusion: 'success', created_at: at(200), run_started_at: at(200), updated_at: at(193) },
+    ]
+  }
+  return []
+}
