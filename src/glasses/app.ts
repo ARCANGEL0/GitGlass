@@ -963,37 +963,90 @@ export class GlassesApp {
   }
 
   private async openFeedEvent(event: any): Promise<void> {
-    const repo = event.repo?.name ?? 'GitHub'
-    const actor = event.actor?.display_login ?? event.actor?.login ?? 'Someone'
-    const title = feedEventPrimary(event)
-    const lines = [
-      repo,
-      relativeTime(event.created_at ?? ''),
-    ]
-    if (event.repositoryDescription) lines.push(event.repositoryDescription)
+    const repo = event.repo?.name ?? ''
     const payload = event.payload ?? {}
+    const pr = payload.pull_request
+    const issue = payload.issue
+    const comment = payload.comment
+
+    if (repo && (pr || issue?.pull_request)) {
+      const number = pr?.number ?? payload.number ?? issue?.number
+      await this.openPr('feed', `${repo}#${number}`)
+      this.putFirst(comment ? this.commentSection(comment, event.type === 'PullRequestReviewCommentEvent') : null)
+      return
+    }
+    if (repo && issue) {
+      await this.openIssue(`${repo}#${issue.number}`, 'feed')
+      this.putFirst(comment ? this.commentSection(comment, false) : null)
+      return
+    }
     if (payload.release) {
-      lines.push(payload.release.name ?? payload.release.tag_name ?? '')
-      if (payload.release.body) lines.push(payload.release.body)
-    } else if (payload.pull_request) {
-      lines.push(payload.pull_request.title ?? '')
-      if (payload.pull_request.body) lines.push(payload.pull_request.body)
-    } else if (payload.issue) {
-      lines.push(payload.issue.title ?? '')
-      if (payload.issue.body) lines.push(payload.issue.body)
-    } else if (payload.commits?.length) {
-      lines.push(...payload.commits.map((commit: any) => commit.message ?? '').filter(Boolean))
-    } else if (payload.forkee?.full_name) {
-      lines.push(payload.forkee.full_name)
+      const release = payload.release
+      this.stack.push({
+        kind: 'detail',
+        module: 'feed',
+        title: release.name || release.tag_name || 'Release',
+        icon: 'star',
+        sections: [
+          {
+            label: 'Release',
+            lines: [
+              `${repo}${SEP}${release.tag_name ?? ''}`,
+              `By ${release.author?.login ?? event.actor?.login ?? ''}${SEP}${relativeTime(release.published_at ?? event.created_at ?? '')}`,
+              release.body ?? '',
+            ].filter(Boolean),
+          },
+        ],
+        sectionIndex: 0,
+      })
+      return
+    }
+    if (payload.commits?.length) {
+      const branch = String(payload.ref ?? '').replace('refs/heads/', '')
+      this.stack.push({
+        kind: 'detail',
+        module: 'feed',
+        title: `${payload.size ?? payload.commits.length} commits to ${branch || repo}`,
+        icon: 'commit',
+        sections: [
+          { label: 'Push', lines: [`${repo}${SEP}${branch}`, `By ${event.actor?.login ?? ''}${SEP}${relativeTime(event.created_at ?? '')}`] },
+          { label: 'Commits', lines: payload.commits.map((c: any) => `${String(c.sha ?? '').slice(0, 7)} ${String(c.message ?? '').split('\n')[0]}`) },
+        ],
+        sectionIndex: 0,
+      })
+      return
+    }
+    const target = payload.forkee?.full_name && event.type === 'ForkEvent' ? payload.forkee.full_name : repo
+    if (target) {
+      await this.openRepo(target)
+      return
     }
     this.stack.push({
       kind: 'detail',
       module: 'feed',
-      title,
-      sections: [{ label: 'Activity', lines: lines.filter(Boolean) }],
+      title: feedEventPrimary(event),
+      sections: [{ label: 'Activity', lines: [relativeTime(event.created_at ?? '')] }],
       sectionIndex: 0,
-      payload: { actor, repo, event },
     })
+  }
+
+  private commentSection(comment: any, review: boolean): { label: string; lines: string[] } {
+    const where = review && comment.path ? `${comment.path}${comment.line ? `:${comment.line}` : ''}` : ''
+    return {
+      label: review ? 'Review comment' : 'Comment',
+      lines: [
+        `${comment.user?.login ?? 'someone'}${SEP}${relativeTime(comment.created_at ?? '')}`,
+        where,
+        String(comment.body ?? ''),
+      ].filter(Boolean),
+    }
+  }
+
+  private putFirst(section: { label: string; lines: string[] } | null): void {
+    const screen = this.stack.current
+    if (!section || !screen?.sections) return
+    screen.sections.unshift(section)
+    this.wrapped.delete(screen)
   }
 
   private async openPr(module: string, itemId: string): Promise<void> {
@@ -1001,8 +1054,9 @@ export class GlassesApp {
     const num = parseInt(numStr, 10)
     const base = `/repos/${this.repoPath(repo)}/pulls/${num}`
     const none = [] as any[]
-    const [pr, comments, reviews, files, commits] = await Promise.all([
+    const [pr, conversation, comments, reviews, files, commits] = await Promise.all([
       this.client.get<any>(base).catch(() => null),
+      this.client.collect<any>(`/repos/${this.repoPath(repo)}/issues/${num}/comments`, { perPage: 20, maxPages: 1 }).catch(() => none),
       this.client.collect<any>(`${base}/comments`, { perPage: 10, maxPages: 1 }).catch(() => none),
       this.client.collect<any>(`${base}/reviews`, { perPage: 10, maxPages: 1 }).catch(() => none),
       this.client.collect<any>(`${base}/files`, { perPage: 20, maxPages: 2 }).catch(() => none),
@@ -1023,7 +1077,8 @@ export class GlassesApp {
         ].filter(Boolean),
       },
     ]
-    if (comments.length) sections.push({ label: 'Comments', lines: comments.map(c => `${c.user?.login}: ${String(c.body ?? '')}`) })
+    if (conversation.length) sections.push({ label: 'Conversation', lines: conversation.map(c => `${c.user?.login}: ${String(c.body ?? '')}`) })
+    if (comments.length) sections.push({ label: 'Review comments', lines: comments.map(c => `${c.user?.login}${c.path ? ` on ${c.path}` : ''}: ${String(c.body ?? '')}`) })
     if (reviews.length) sections.push({ label: 'Reviews', lines: reviews.map(r => `${r.user?.login}: ${r.state}`) })
     if (files.length) sections.push({ label: 'Files', lines: files.map(f => `${f.status ?? ''} ${f.filename} (+${f.additions} -${f.deletions})`) })
     if (commits.length) sections.push({ label: 'Commits', lines: commits.map(c => `${c.sha?.slice(0, 7)} ${c.commit?.message?.split('\n')[0] ?? ''}`) })
@@ -1039,7 +1094,7 @@ export class GlassesApp {
     })
   }
 
-  private async openIssue(itemId: string): Promise<void> {
+  private async openIssue(itemId: string, module = 'issues'): Promise<void> {
     const [repo, numStr] = itemId.split('#')
     const num = parseInt(numStr, 10)
     const base = `/repos/${this.repoPath(repo)}/issues/${num}`
@@ -1062,8 +1117,9 @@ export class GlassesApp {
 
     this.stack.push({
       kind: 'detail',
-      module: 'issues',
+      module,
       title: `#${issue.number} ${issue.title}`,
+      icon: issue.state === 'closed' ? 'check' : 'issue',
       sections,
       sectionIndex: 0,
     })

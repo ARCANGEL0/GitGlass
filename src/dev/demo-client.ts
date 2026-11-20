@@ -8,9 +8,9 @@ import { DEFAULT_MODULES, type ModulePrefs } from '../types'
 const LOGIN = 'octo-dev'
 
 const repos = [
-  { full_name: `${LOGIN}/g2git`, name: 'g2git', private: false, stargazers_count: 412, forks_count: 31, open_issues_count: 7, updated_at: new Date(Date.now() - 3600e3).toISOString(), language: 'TypeScript' },
-  { full_name: `${LOGIN}/hud-kit`, name: 'hud-kit', private: false, stargazers_count: 1288, forks_count: 96, open_issues_count: 12, updated_at: new Date(Date.now() - 86400e3).toISOString(), language: 'TypeScript' },
-  { full_name: `${LOGIN}/dotfiles`, name: 'dotfiles', private: true, stargazers_count: 3, forks_count: 0, open_issues_count: 0, updated_at: new Date(Date.now() - 5 * 86400e3).toISOString(), language: 'Shell' },
+  { owner: { login: LOGIN }, full_name: `${LOGIN}/g2git`, name: 'g2git', private: false, stargazers_count: 412, forks_count: 31, open_issues_count: 7, updated_at: new Date(Date.now() - 3600e3).toISOString(), language: 'TypeScript' },
+  { owner: { login: LOGIN }, full_name: `${LOGIN}/hud-kit`, name: 'hud-kit', private: false, stargazers_count: 1288, forks_count: 96, open_issues_count: 12, updated_at: new Date(Date.now() - 86400e3).toISOString(), language: 'TypeScript' },
+  { owner: { login: LOGIN }, full_name: `${LOGIN}/dotfiles`, name: 'dotfiles', private: true, stargazers_count: 3, forks_count: 0, open_issues_count: 0, updated_at: new Date(Date.now() - 5 * 86400e3).toISOString(), language: 'Shell' },
 ]
 
 const prItems = [
@@ -69,9 +69,9 @@ export class DemoClient extends GitHubClient {
     }
     if (path.startsWith('/notifications')) {
       return [
-        { id: '1', unread: true, reason: 'review_requested', subject: { title: 'Draw HUD frames as image tiles', type: 'PullRequest' }, repository: { full_name: `${LOGIN}/g2git` } },
-        { id: '2', unread: true, reason: 'mention', subject: { title: 'Gauge arc clips at 100%', type: 'Issue' }, repository: { full_name: `${LOGIN}/hud-kit` } },
-        { id: '3', unread: true, reason: 'author', subject: { title: 'Release v1.4.0', type: 'Release' }, repository: { full_name: `${LOGIN}/hud-kit` } },
+        { id: '1', unread: true, reason: 'review_requested', subject: { title: 'Draw HUD frames as image tiles', type: 'PullRequest' }, repository: { owner: { login: LOGIN }, full_name: `${LOGIN}/g2git` } },
+        { id: '2', unread: true, reason: 'mention', subject: { title: 'Gauge arc clips at 100%', type: 'Issue' }, repository: { owner: { login: LOGIN }, full_name: `${LOGIN}/hud-kit` } },
+        { id: '3', unread: true, reason: 'author', subject: { title: 'Release v1.4.0', type: 'Release' }, repository: { owner: { login: LOGIN }, full_name: `${LOGIN}/hud-kit` } },
       ] as T
     }
     if (path.startsWith('/search/repositories')) {
@@ -88,6 +88,11 @@ export class DemoClient extends GitHubClient {
       }
       return { items: query.includes('is:issue') ? issueItems : prItems } as T
     }
+    const issue = path.match(/\/repos\/(.+)\/issues\/(\d+)$/)
+    if (issue) {
+      const found = issueItems.find(i => i.number === Number(issue[2]))
+      return { number: Number(issue[2]), title: found?.title ?? 'Issue', state: 'open', user: found?.user ?? { login: 'kiko' }, body: 'After closing the app and opening it again the connect screen comes back. The token should stay saved.' } as T
+    }
     const pull = path.match(/\/repos\/(.+)\/pulls\/(\d+)$/)
     if (pull) {
       return {
@@ -99,9 +104,25 @@ export class DemoClient extends GitHubClient {
     return [] as T
   }
 
+  async fetchPage<T>(): Promise<{ items: T[]; nextPage: number | null }> {
+    return { items: [], nextPage: null }
+  }
+
   async collect<T>(path: string): Promise<T[]> {
     await new Promise(resolve => setTimeout(resolve, 150))
     if (path.startsWith('/user/repos')) return repos as T[]
+    if (path.endsWith('/events')) {
+      if (!path.includes('/g2git/')) return [] as T[]
+      const at = (min: number) => new Date(Date.now() - min * 60e3).toISOString()
+      const repo = { name: `${LOGIN}/g2git` }
+      return [
+        { id: 'e1', type: 'IssueCommentEvent', actor: { login: 'rook' }, repo, created_at: at(4), payload: { action: 'created', issue: { number: 86, title: 'Token lost after app restart' }, comment: { user: { login: 'rook' }, created_at: at(4), body: 'Still happens on 1.4.1 after force-quitting the Even app. Storage key looks right.' } } },
+        { id: 'e2', type: 'PullRequestEvent', actor: { login: 'kiko' }, repo, created_at: at(40), payload: { action: 'opened', number: 142, pull_request: { number: 142, title: 'Draw HUD frames as image tiles' } } },
+        { id: 'e3', type: 'WatchEvent', actor: { login: 'lumen' }, repo, created_at: at(90), payload: { action: 'started' } },
+        { id: 'e4', type: 'ReleaseEvent', actor: { login: 'marrow' }, repo, created_at: at(300), payload: { release: { name: 'v1.4.1', tag_name: 'v1.4.1', author: { login: 'marrow' }, published_at: at(300), body: 'Improved UI performance, added more icons.' } } },
+        { id: 'e5', type: 'PushEvent', actor: { login: 'kiko' }, repo, created_at: at(600), payload: { ref: 'refs/heads/master', size: 2, commits: [{ sha: '2393f56aa', message: 'fix ui' }, { sha: 'e2f60ba11', message: 'remove packaging steps from readme' }] } },
+      ] as T[]
+    }
     if (path.endsWith('/comments')) return [{ user: { login: 'rook' }, body: 'Looks great on glass. Can the hint row go one level dimmer?' }] as T[]
     if (path.endsWith('/reviews')) return [{ user: { login: 'marrow' }, state: 'APPROVED' }] as T[]
     if (path.endsWith('/files')) return [{ status: 'added', filename: 'src/glasses/hud/pages.ts', additions: 260, deletions: 0, patch: '@@ -0,0 +1,12 @@\n+export function drawCard(p: Pixels) {\n+  p.path(outline, BRIGHT, 2)\n+}' }] as T[]
