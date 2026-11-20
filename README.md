@@ -68,19 +68,7 @@ one size. GitGlass draws everything else itself:
 The page is created once at launch. After that every screen change is a tile
 send or an in-place text update, with no page rebuilds and no flicker.
 
-## Install
-
-GitGlass is in beta on Even Hub (`com.arcxlo.githubg2`). If you're a tester,
-open the Even Realities app, go to **Me → Beta tester** and install
-**GitHub G2**.
-
-To connect, create a GitHub personal access token and paste it on the phone
-screen. A classic token with `repo`, `read:user` and `notifications` covers
-everything. Fine-grained tokens work too, but GitHub doesn't let them read
-notifications. The token stays in the Even app's storage on your phone and is
-only sent to `api.github.com`.
-
-## Develop
+## Build
 
 ```bash
 npm install
@@ -130,3 +118,21 @@ src/
   GitHub and the Octocat are trademarks of GitHub, Inc. GitGlass is not affiliated
   with GitHub or Even Realities.
 - Built with the [Even Hub SDK](https://hub.evenrealities.com/docs).
+
+<div align="center">
+
+## ❤️ Support
+
+ ### if you enjoy the project and want to support future development:
+
+[![Star on GitHub](https://img.shields.io/github/stars/ARCANGEL0/GitGlass?style=social)](https://github.com/ARCANGEL0/GitGlass)
+[![Follow on GitHub](https://img.shields.io/github/followers/ARCANGEL0?style=social)](https://github.com/ARCANGEL0)
+<br>
+
+<a href='https://ko-fi.com/J3J7WTYV7' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi3.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+<br>
+<strong>Hack the world. Byte by Byte.</strong> ⛛ <br>
+𝝺𝗿𝗰𝗮𝗻𝗴𝗲𝗹𝗼 @ 2026
+
+
+</div>
