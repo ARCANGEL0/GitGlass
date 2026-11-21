@@ -45,6 +45,9 @@ export const GLASSES_MENU = [
   ...MODULES.map((m, i) => ({ id: DASHBOARD_MENU_ID + 1 + i, label: m.label })),
 ]
 
+const SPLASH_TEXT = 'GitGlass.\nGitHub on the move.'
+const SPLASH_TYPE_MS = 45
+const SPLASH_HOLD_MS = 700
 const DASHBOARD_PAGES = 3
 const TREE_PAGE = 2
 const STALE_MS = 2 * 60_000
@@ -203,6 +206,7 @@ export class GlassesApp {
   private feedPage = 1
   private feedHasMore = false
   private feedLoading: Promise<void> | null = null
+  private booting = true
   private stats: DashboardStats | null = null
   private statsLoading: Promise<void> | null = null
   private wrapped = new WeakMap<Screen, string[]>()
@@ -240,7 +244,28 @@ export class GlassesApp {
   }
 
   start(): void {
-    void this.paint()
+    void this.boot()
+  }
+
+  private async boot(): Promise<void> {
+    const text = SPLASH_TEXT
+    const frames = 5
+    let shownFrame = -1
+    for (let typed = 1; typed <= text.length; typed++) {
+      const frame = Math.min(frames, Math.ceil((typed / text.length) * frames))
+      const view: HudView = { kind: 'splash', progress: frame / frames, text: text.slice(0, typed) + (typed < text.length ? '_' : '') }
+      if (frame !== shownFrame) {
+        shownFrame = frame
+        await this.hud.show(view)
+      } else {
+        void this.hud.show(view)
+        await new Promise(resolve => setTimeout(resolve, SPLASH_TYPE_MS))
+      }
+    }
+    await this.hud.show({ kind: 'splash', progress: 1, text })
+    await new Promise(resolve => setTimeout(resolve, SPLASH_HOLD_MS))
+    this.booting = false
+    await this.paint()
   }
 
   private get enabledModules(): ModuleInfo[] {
@@ -253,6 +278,7 @@ export class GlassesApp {
   }
 
   private paint(): Promise<void> {
+    if (this.booting) return Promise.resolve()
     return this.hud.show(this.view())
   }
 
@@ -471,10 +497,10 @@ export class GlassesApp {
   // ---------- input ----------
 
   bind(): void {
-    this.runtime.onSwipe(dir => void this.handleSwipe(dir === 'down' ? 1 : -1).catch(() => {}))
-    this.runtime.onTap(() => void this.handleTap().catch(() => {}))
-    this.runtime.onDoubleTap(() => void this.back())
-    this.runtime.onMenuSelect(id => void this.handleMenu(id).catch(() => {}))
+    this.runtime.onSwipe(dir => { if (!this.booting) void this.handleSwipe(dir === 'down' ? 1 : -1).catch(() => {}) })
+    this.runtime.onTap(() => { if (!this.booting) void this.handleTap().catch(() => {}) })
+    this.runtime.onDoubleTap(() => { if (!this.booting) void this.back() })
+    this.runtime.onMenuSelect(id => { if (!this.booting) void this.handleMenu(id).catch(() => {}) })
     this.runtime.onForeground(() => void this.paint())
   }
 

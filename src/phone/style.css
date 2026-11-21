@@ -1207,3 +1207,85 @@ input:focus-visible {
 .run-status--failed {
   color: var(--danger);
 }
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: var(--bg);
+  transition: opacity 0.3s ease;
+}
+
+.splash-done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-mark {
+  width: 88px;
+  height: 88px;
+}
+
+.splash-mark path {
+  fill: var(--text);
+  fill-opacity: 0;
+  stroke: var(--accent);
+  stroke-width: 0.4;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: splash-draw 0.9s ease-out forwards, splash-fill 0.5s ease-out 0.8s forwards;
+}
+
+@keyframes splash-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes splash-fill {
+  to { fill-opacity: 1; }
+}
+
+.splash-text {
+  margin: 0;
+  min-height: 3em;
+  font-family: monospace;
+  font-size: 18px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.splash-text span {
+  display: block;
+  min-height: 1.5em;
+}
+
+.splash-text span:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.splash-text span:last-child {
+  color: var(--text-dim);
+}
+
+.splash-text .typing::after {
+  content: "_";
+  color: var(--accent);
+  animation: splash-blink 0.8s steps(1) infinite;
+}
+
+@keyframes splash-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-mark path {
+    animation: none;
+    stroke-dashoffset: 0;
+    fill-opacity: 1;
+  }
+}

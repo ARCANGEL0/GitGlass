@@ -334,3 +334,19 @@ export function drawBox(p: Pixels, name: IconName, title: string, rowIcons: Arra
   // Closing rule above the hint lines.
   p.line(x0, y1, x1, y1, MID, 1)
 }
+
+/** Boot screen art: the GitHub mark inside a ring that draws itself as `progress` goes 0 to 1. */
+export function drawSplash(p: Pixels, progress: number, left: number, top: number, size: number): void {
+  const cx = left + size / 2
+  const cy = top + size / 2
+  const share = Math.max(0, Math.min(1, progress))
+  p.circle(cx, cy, size / 2 - 6, 3, false, 2)
+  if (share > 0) p.arc(cx, cy, size / 2 - 6, 0, share * Math.PI * 2, BRIGHT, 3)
+  const mark = size * 0.56
+  p.svg(GITHUB_MARK, 24, cx - mark / 2, cy - mark / 2, mark, Math.round(2 + share * 13), 2)
+  if (share >= 1) {
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      p.circle(Math.round(cx + dx * (size / 2 - 6)), Math.round(cy + dy * (size / 2 - 6)), 4, BRIGHT, true)
+    }
+  }
+}

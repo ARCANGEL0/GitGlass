@@ -1,18 +1,21 @@
 // Paints HUD views onto the glasses.
 //
-// A view is drawn to one full-screen canvas and cut into the four tiles. Only
-// tiles whose pixels changed are sent, so moving the selection on a module graph
-// resends one or two tiles, and a box with the same icon sends none.
+// A view is drawn to one full-screen canvas, then cut into the image
+// containers of its layout. Only images whose pixels changed are sent. When a
+// view needs another layout the page is rebuilt with the new text already in
+// it, so the next screen never shows on top of the last one's art.
 // Calls that arrive while a paint is running collapse into one more paint.
 
 import type { GitHubRuntime } from '../../even'
 import type { IconName } from './art'
-import { Pixels, TILES, loadHudFont, tileKey, tilePng } from './canvas'
+import { Pixels, loadHudFont, tileKey, tilePng } from './canvas'
+import { BOX_LAYOUT, FULL_LAYOUT, SPLASH_LAYOUT, SPLASH_LOGO, type Layout } from './layouts'
 import { CURSOR_PX } from './text'
 import {
   drawBox,
   drawGraph,
   drawOverview,
+  drawSplash,
   drawStateBar,
   type GraphData,
   type OverviewData,
@@ -35,7 +38,14 @@ export type HudView =
   | { kind: 'overview'; data: OverviewData }
   | { kind: 'stateBar'; data: StateBarData }
   | { kind: 'graph'; data: GraphData }
+  | { kind: 'splash'; progress: number; text: string }
   | BoxView
+
+function layoutFor(view: HudView): Layout {
+  if (view.kind === 'box') return BOX_LAYOUT
+  if (view.kind === 'splash') return SPLASH_LAYOUT
+  return FULL_LAYOUT
+}
 
 function draw(view: HudView): Pixels {
   const p = new Pixels()
@@ -43,6 +53,7 @@ function draw(view: HudView): Pixels {
     case 'overview': drawOverview(p, view.data); break
     case 'stateBar': drawStateBar(p, view.data); break
     case 'graph': drawGraph(p, view.data); break
+    case 'splash': drawSplash(p, view.progress, SPLASH_LOGO.x, SPLASH_LOGO.y, SPLASH_LOGO.width); break
     case 'box': drawBox(p, view.icon, view.title, view.rowIcons, TEXT_BOXES.body.x + Math.round(CURSOR_PX) + 1); break
   }
   p.quantize()
@@ -53,6 +64,7 @@ const SLOTS: TextSlot[] = ['count', 'body', 'hint']
 
 function textsFor(view: HudView): Record<TextSlot, string> {
   if (view.kind === 'box') return { count: view.count || ' ', body: view.body || ' ', hint: view.hint || ' ' }
+  if (view.kind === 'splash') return { count: ' ', body: view.text || ' ', hint: ' ' }
   return { count: ' ', body: ' ', hint: ' ' }
 }
 
@@ -100,10 +112,17 @@ export class Hud {
   private async flush(view: HudView): Promise<void> {
     const pixels = draw(view)
     const texts = textsFor(view)
+    const layout = layoutFor(view)
+    const slots = SLOTS.filter(slot => layout.texts[slot])
 
-    await Promise.all(SLOTS.map(slot => this.runtime.setText(slot, texts[slot])))
+    if (this.runtime.layout() !== layout) {
+      await this.runtime.showLayout(layout, texts)
+      this.sent.clear()
+    } else {
+      await Promise.all(slots.map(slot => this.runtime.setText(slot, texts[slot])))
+    }
 
-    const changed = TILES
+    const changed = layout.images
       .map(tile => ({ tile, key: tileKey(pixels, tile) }))
       .filter(({ tile, key }) => this.sent.get(tile.id) !== key)
     const encoded = await Promise.all(changed.map(({ tile }) => tilePng(pixels, tile)))
@@ -114,7 +133,7 @@ export class Hud {
     }
 
     if (changed.length) {
-      await Promise.all(SLOTS.filter(slot => texts[slot].trim()).map(slot => this.runtime.setText(slot, texts[slot], true)))
+      await Promise.all(slots.filter(slot => texts[slot].trim()).map(slot => this.runtime.setText(slot, texts[slot], true)))
     }
   }
 }

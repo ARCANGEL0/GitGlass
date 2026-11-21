@@ -1,10 +1,11 @@
 // Even Hub bridge for the GitHub G2 glasses.
 //
-// The glasses page is created once and never changes shape:
+// The glasses page is built from a layout (see glasses/hud/layouts.ts):
 //   - a blank full-screen text container at the back captures input,
-//   - four image tiles cover the screen and carry the drawn HUD,
-//   - three text containers (count, body, hint) sit on top for Box screens.
-// After that, every screen change is a tile send or an in-place text upgrade.
+//   - image containers carry the drawn HUD,
+//   - text containers sit on top, and thin bordered ones draw rules.
+// Within a layout, screen changes are image sends and in-place text upgrades.
+// Moving to another layout rebuilds the page.
 // Writes go through one queue with a timeout, because overlapping BLE calls
 // race and a bad hop can otherwise hang for half a minute.
 
@@ -25,8 +26,9 @@ import {
   waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 import type { AppConfig } from './config'
-import { SCREEN_H, SCREEN_W, TILES, type Tile } from './glasses/hud/canvas'
-import { TEXT_BOXES, type TextSlot } from './glasses/hud/pages'
+import { SCREEN_H, SCREEN_W, type Tile } from './glasses/hud/canvas'
+import type { TextBox, TextSlot } from './glasses/hud/pages'
+import type { Layout, LineBox } from './glasses/hud/layouts'
 
 export type SwipeDirection = 'up' | 'down'
 export type InputSource = 'glasses' | 'ring' | 'unknown'
@@ -44,6 +46,8 @@ export interface MenuEntry {
 }
 
 export interface GitHubRuntime {
+  layout: () => Layout
+  showLayout: (layout: Layout, texts: Partial<Record<TextSlot, string>>) => Promise<void>
   setText: (slot: TextSlot, content: string, force?: boolean) => Promise<void>
   sendTile: (tile: Tile, png: number[]) => Promise<void>
   onTap: (handler: (source: InputSource) => void) => void
@@ -91,10 +95,7 @@ function buildMenu(menu: readonly MenuEntry[]): MenuContainerProperty | undefine
   return items.length ? new MenuContainerProperty({ menuItems: items }) : undefined
 }
 
-function textContainer(slot: TextSlot | 'input', content: string, z: number): TextContainerProperty {
-  const box = slot === 'input'
-    ? { id: 1, name: 'input', x: 0, y: 0, width: SCREEN_W, height: SCREEN_H, color: 4 }
-    : TEXT_BOXES[slot]
+function textContainer(box: TextBox, content: string, z: number, capture = false): TextContainerProperty {
   return new TextContainerProperty({
     xPosition: box.x,
     yPosition: box.y,
@@ -106,10 +107,39 @@ function textContainer(slot: TextSlot | 'input', content: string, z: number): Te
     containerID: box.id,
     containerName: box.name,
     content,
-    isEventCapture: slot === 'input' ? 1 : 0,
+    isEventCapture: capture ? 1 : 0,
     zOrderIndex: z,
     textColor: box.color,
   })
+}
+
+function lineContainer(line: LineBox, z: number): TextContainerProperty {
+  return new TextContainerProperty({
+    xPosition: line.x,
+    yPosition: line.y,
+    width: line.width,
+    height: line.height,
+    borderWidth: 1,
+    borderColor: line.color,
+    paddingLength: 0,
+    containerID: line.id,
+    containerName: line.name,
+    content: ' ',
+    isEventCapture: 0,
+    zOrderIndex: z,
+  })
+}
+
+const INPUT_BOX: TextBox = { id: 1, name: 'input', x: 0, y: 0, width: SCREEN_W, height: SCREEN_H, color: 4 }
+
+function pageFor(layout: Layout, texts: Partial<Record<TextSlot, string>>) {
+  const textObject = [
+    textContainer(INPUT_BOX, ' ', 1, true),
+    ...(Object.entries(layout.texts) as Array<[TextSlot, TextBox]>).map(([slot, box], i) => textContainer(box, texts[slot] || ' ', 20 + i)),
+    ...layout.lines.map((line, i) => lineContainer(line, 30 + i)),
+  ]
+  const imageObject = layout.images.map((tile, i) => imageContainer(tile, 2 + i))
+  return { containerTotalNum: textObject.length + imageObject.length, textObject, imageObject }
 }
 
 function imageContainer(tile: Tile, z: number): ImageContainerProperty {
@@ -124,7 +154,7 @@ function imageContainer(tile: Tile, z: number): ImageContainerProperty {
   })
 }
 
-export async function connectGitHubRuntime(args: { config: AppConfig; menu?: readonly MenuEntry[] }): Promise<GitHubRuntime | null> {
+export async function connectGitHubRuntime(args: { config: AppConfig; layout: Layout; menu?: readonly MenuEntry[] }): Promise<GitHubRuntime | null> {
   const { config, menu = [] } = args
   let bridge: Awaited<ReturnType<typeof waitForEvenAppBridge>>
   try {
@@ -134,23 +164,12 @@ export async function connectGitHubRuntime(args: { config: AppConfig; menu?: rea
   }
 
   const menuObject = buildMenu(menu)
-  const texts = [
-    textContainer('input', ' ', 1),
-    textContainer('body', ' ', 7),
-    textContainer('hint', ' ', 8),
-    textContainer('count', ' ', 9),
-  ]
-  const images = TILES.map((tile, i) => imageContainer(tile, 2 + i))
-  const containerTotalNum = texts.length + images.length
-
-  const created = await bridge.createStartUpPageContainer(
-    new CreateStartUpPageContainer({ containerTotalNum, textObject: texts, imageObject: images, menuObject }),
-  )
+  let layout = args.layout
+  const first = pageFor(layout, {})
+  const created = await bridge.createStartUpPageContainer(new CreateStartUpPageContainer({ ...first, menuObject }))
   if (created !== 0) {
     // After a WebView reload the startup page already exists, so rebuild it instead.
-    const rebuilt = await bridge.rebuildPageContainer(
-      new RebuildPageContainer({ containerTotalNum, textObject: texts, imageObject: images, menuObject }),
-    )
+    const rebuilt = await bridge.rebuildPageContainer(new RebuildPageContainer({ ...first, menuObject }))
     if (!rebuilt) return null
   }
 
@@ -161,7 +180,7 @@ export async function connectGitHubRuntime(args: { config: AppConfig; menu?: rea
     return next
   }
 
-  const shownText: Record<TextSlot, string> = { count: ' ', body: ' ', hint: ' ' }
+  let shownText: Partial<Record<TextSlot, string>> = {}
 
   let tapHandler: ((source: InputSource) => void) | null = null
   let swipeHandler: ((dir: SwipeDirection, source: InputSource) => void) | null = null
@@ -218,10 +237,21 @@ export async function connectGitHubRuntime(args: { config: AppConfig; menu?: rea
   })
 
   return {
+    layout: () => layout,
+    showLayout(next, texts) {
+      return enqueue(`layout ${next.key}`, async () => {
+        const ok = await bridge.rebuildPageContainer(new RebuildPageContainer({ ...pageFor(next, texts), menuObject }))
+        if (!ok) throw new Error(`layout ${next.key} rejected`)
+        layout = next
+        shownText = {}
+        for (const slot of Object.keys(next.texts) as TextSlot[]) shownText[slot] = texts[slot] || ' '
+      })
+    },
     setText(slot, content, force = false) {
       const next = (content || ' ').slice(0, 1900)
+      const box = layout.texts[slot]
+      if (!box) return Promise.resolve()
       if (!force && shownText[slot] === next) return Promise.resolve()
-      const box = TEXT_BOXES[slot]
       return enqueue(`text ${slot}`, async () => {
         await bridge.textContainerUpgrade(
           new TextContainerUpgrade({

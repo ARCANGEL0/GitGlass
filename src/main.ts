@@ -1,8 +1,10 @@
 import { StateStore } from './state/store'
 import { GitHubClient } from './github/client'
 import { PhoneApp } from './phone/app'
+import { showSplash } from './phone/splash'
 import { connectGitHubRuntime } from './even'
 import { GLASSES_MENU, GlassesApp } from './glasses/app'
+import { SPLASH_LAYOUT } from './glasses/hud/layouts'
 import { makeConfig } from './config'
 import { EMPTY_STATE } from './types'
 import './phone/style.css'
@@ -22,6 +24,7 @@ async function makeClient(): Promise<GitHubClient> {
 }
 
 async function main(): Promise<void> {
+  showSplash()
   const client = await makeClient()
   const viteEnv = (import.meta as ImportMeta & {
     env?: { DEV?: boolean; VITE_DEMO_TOKEN?: string }
@@ -32,7 +35,7 @@ async function main(): Promise<void> {
   const phone = new PhoneApp(root, store, client)
   void phone.start()
 
-  const runtime = await connectGitHubRuntime({ config, menu: GLASSES_MENU })
+  const runtime = await connectGitHubRuntime({ config, menu: GLASSES_MENU, layout: SPLASH_LAYOUT })
   if (!runtime) return
 
   const glasses = new GlassesApp(runtime, store.get(), config, client)
